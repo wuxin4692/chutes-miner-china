@@ -1,3 +1,9 @@
+validators:
+  defaultRegistry: registry.chutes.ai:5000
+  supported:
+    - hotkey: 5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4
+      registry: registry.chutes.ai:5000
+
 minerApi:
   image: parachutes/miner:latest
   imagePullPolicy: IfNotPresent

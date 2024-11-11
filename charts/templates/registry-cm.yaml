@@ -17,11 +17,10 @@ data:
         include       /etc/nginx/mime.types;
         default_type  application/octet-stream;
 
-        # Map directive to validate and set upstream hosts (validators must be explicitly configured here!)
-        map $http_{{ .Values.registry.config.validators.headerName | lower | replace "-" "_" }} $upstream_host {
-            default {{ .Values.registry.config.validators.defaultUpstream }};
-            {{- range .Values.registry.config.validators.allowedHosts }}
-            {{ . }} {{ . }};
+        map $http_host $upstream_host {
+            default {{ .Values.validators.defaultRegistry }};
+            {{- range .Values.validators.supported }}
+            {{ .hotkey | lower }}.chutes-miner-registry.chutes.svc.cluster.local {{ .registry }};
             {{- end }}
         }
         log_format main '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" '
