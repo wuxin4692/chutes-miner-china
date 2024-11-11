@@ -1,0 +1,231 @@
+minerApi:
+  image: parachutes/miner:latest
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+  service:
+    type: NodePort
+    port: 7777
+    targetPort: 7777
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: nvidia.com/gpu
+              operator: DoesNotExist
+            - key: cloud.google.com/gke-accelerator
+              operator: DoesNotExist
+            - key: k8s.amazonaws.com/accelerator
+              operator: DoesNotExist
+            - key: azure.com/gpu
+              operator: DoesNotExist
+  tolerations: []
+  annotations: {}
+  labels:
+    app: miner
+
+postgres:
+  image: postgres:15
+  imagePullPolicy: IfNotPresent
+  persistence:
+    accessMode: ReadWriteOnce
+    size: 100Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+  database:
+    name: chutes
+    user: chutes
+    existingSecret: ""
+    passwordKey: "postgres-password"
+  service:
+    type: ClusterIP
+    port: 5432
+    targetPort: 5432
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu
+            operator: DoesNotExist
+          - key: cloud.google.com/gke-accelerator
+            operator: DoesNotExist
+          - key: k8s.amazonaws.com/accelerator
+            operator: DoesNotExist
+          - key: azure.com/gpu
+            operator: DoesNotExist
+  tolerations: []
+  annotations: {}
+  labels:
+    app: postgres
+
+redis:
+  image: redis:7
+  imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu
+            operator: DoesNotExist
+          - key: cloud.google.com/gke-accelerator
+            operator: DoesNotExist
+          - key: k8s.amazonaws.com/accelerator
+            operator: DoesNotExist
+          - key: azure.com/gpu
+            operator: DoesNotExist
+  tolerations: []
+  resources:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 6379
+  password:
+    existingSecret: ""
+    existingSecretKey: "redis-password"
+    value: ""
+  config:
+    customArgs: []
+  persistence:
+    enabled: false
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    storageClass: ""
+
+registry:
+  image: nginx:1.25
+  imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 5000
+    targetPort: 5000
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu
+            operator: DoesNotExist
+          - key: cloud.google.com/gke-accelerator
+            operator: DoesNotExist
+          - key: k8s.amazonaws.com/accelerator
+            operator: DoesNotExist
+          - key: azure.com/gpu
+            operator: DoesNotExist
+  nodeSelector: {}
+  tolerations: []
+  config:
+    workerProcesses: auto
+    workerConnections: 1024
+    keepaliveTimeout: 65
+    clientMaxBodySize: "0"
+    validators:
+      headerName: "X-Registry-Upstream"
+      allowedHosts:
+        - "registry.chutes.ai:5000"
+      defaultUpstream: "registry.chutes.ai:5000"
+
+squid:
+  image: "ubuntu/squid:5.2-22.04_beta"
+  imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 3128
+  resources:
+    requests:
+      cpu: 2
+      memory: 16Gi
+    limits:
+      cpu: 2
+      memory: 16Gi
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu
+            operator: DoesNotExist
+          - key: cloud.google.com/gke-accelerator
+            operator: DoesNotExist
+          - key: k8s.amazonaws.com/accelerator
+            operator: DoesNotExist
+          - key: azure.com/gpu
+            operator: DoesNotExist
+  nodeSelector: {}
+  tolerations: []
+  config:
+    allowedNetworks:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+    maxRequestSize: 100000 MB
+    cacheSize: 8192  # GB
+    diskCache:
+      size: 2000000  # MB
+      level1: 1024
+      level2: 256
+    readAheadSize: 1048576
+    bufferSize: 1048576
+    quickAbort:
+      high: 100
+      low: 95
+      pct: 95
+    workerThreads: 32
+    pipelineRequests: 32
+    refreshPatterns:
+      - pattern: "\\.safetensors$"
+        min: 10080  # 7 days
+        percent: 100
+        max: 43200  # 30 days
+      - pattern: "\\.bin$"
+        min: 10080
+        percent: 100
+        max: 43200
+      - pattern: "\\.pt$"
+        min: 10080
+        percent: 100
+        max: 43200
+      - pattern: "\\.pth$"
+        min: 10080
+        percent: 100
+        max: 43200
+      - pattern: "\\.ckpt$"
+        min: 10080
+        percent: 100
+        max: 43200
+  persistence:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 2100Gi
+    storageClass: ""

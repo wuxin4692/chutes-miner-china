@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chutes-miner-registry-nginx-config
+  labels:
+    {{- include "registry.labels" . | nindent 4 }}
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  {{ .Values.registry.config.workerProcesses }};
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+    events {
+        worker_connections  {{ .Values.registry.config.workerConnections }};
+    }
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        # Map directive to validate and set upstream hosts (validators must be explicitly configured here!)
+        map $http_{{ .Values.registry.config.validators.headerName | lower | replace "-" "_" }} $upstream_host {
+            default {{ .Values.registry.config.validators.defaultUpstream }};
+            {{- range .Values.registry.config.validators.allowedHosts }}
+            {{ . }} {{ . }};
+            {{- end }}
+        }
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for" "upstream=$upstream_host"';
+        access_log  /var/log/nginx/access.log  main;
+        sendfile on;
+        keepalive_timeout  {{ .Values.registry.config.keepaliveTimeout }};
+        client_max_body_size {{ .Values.registry.config.clientMaxBodySize }};
+
+        server {
+            listen {{ .Values.registry.service.targetPort }};
+            location /v2/ {
+                limit_except GET {
+                    deny all;
+                }
+                auth_request /auth;
+                auth_request_set X-Chutes-Signature $upstream_http_x_chutes_signature;
+                proxy_set_header X-Chutes-Hotkey $upstream_http_x_chutes_signature;
+                proxy_pass http://$upstream_host;
+                proxy_set_header Host $upstream_host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                if ($http_{{ $.Values.registry.config.validators.headerName | lower | replace "-" "_" }} = "") {
+                    return 400 "Missing {{ $.Values.registry.config.validators.headerName }} header";
+                }
+            }
+
+            location = /auth {
+                internal;
+                proxy_pass http://chutes-miner-miner-api:{{ .Values.minerApi.service.port }}/registry/auth;
+                auth_request_set $auth_resp_authorization $upstream_http_authorization;
+                proxy_set_header X-Chutes-Hotkey $http_x_parachutes_hotkey;
+                proxy_set_header X-Chutes-Signature $http_x_parachutes_signature;
+                proxy_set_header X-Chutes-Auth $http_x_parachutes_auth;
+                proxy_pass_request_body off;
+                proxy_set_header Content-Length "";
+                error_page 401 403 500 502 503 504 = @block;
+            }
+
+            location @block {
+                return 401;
+            }
+        }
+    }

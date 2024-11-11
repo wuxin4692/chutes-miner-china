@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chutes-miner-registry
+  labels:
+    {{- include "registry.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.registry.service.type }}
+  ports:
+    - port: {{ .Values.registry.service.port }}
+      targetPort: {{ .Values.registry.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "registry.labels" . | nindent 4 }}

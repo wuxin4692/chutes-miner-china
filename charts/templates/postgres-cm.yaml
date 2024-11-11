@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chutes-miner-postgres-config
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
+data:
+  DATABASE_HOST: chutes-miner-postgres
+  DATABASE_PORT: "{{ .Values.postgres.service.port }}"
+  DATABASE_NAME: {{ .Values.postgres.database.name }}
+  DATABASE_USER: {{ .Values.postgres.database.user }}

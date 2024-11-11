@@ -1,0 +1,17 @@
+{{- if .Values.squid.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chutes-miner-squid-cache
+  labels:
+    {{- include "squid.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.squid.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.squid.persistence.size }}
+  {{- if .Values.squid.persistence.storageClass }}
+  storageClassName: {{ .Values.squid.persistence.storageClass }}
+  {{- end }}
+{{- end }}
