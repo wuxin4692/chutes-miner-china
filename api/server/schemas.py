@@ -2,7 +2,7 @@
 Server (kubernetes node) tracking ORM.
 """
 
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,8 +14,8 @@ class Server(Base):
 
     server_id = Column(String, primary_key=True)
     name = Column(String, unique=True, nullable=False)
-    kubernetes_id = Column(String, unique=True, nullable=False)
     ip_address = Column(String)
+    verification_port = Column(Integer)
     status = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     labels = Column(JSONB, nullable=False)
