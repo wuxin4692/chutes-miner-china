@@ -13,3 +13,11 @@ app.kubernetes.io/name: chutes-registry
 {{- define "squid.labels" -}}
 app.kubernetes.io/name: chutes-squid
 {{- end }}
+
+{{- define "chutes.labels" -}}
+chute-deployment: "true"
+{{- end }}
+
+{{- define "bootstrap.labels" -}}
+node-bootstrap: "true"
+{{- end }}
