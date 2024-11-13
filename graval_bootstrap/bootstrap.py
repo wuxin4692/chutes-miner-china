@@ -114,7 +114,7 @@ def main():
         verify_request(request, args.validator_whitelist)
         return miner.process_device_info_challenge(challenge)
 
-    uvicorn.run(app=app, host="0.0.0.0", port=8001)
+    uvicorn.run(app=app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
