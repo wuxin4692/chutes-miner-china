@@ -34,7 +34,9 @@ from api.exceptions import (
 import ipaddress
 
 
-async def gather_gpu_info(node_object: V1Node, graval_deployment: V1Deployment, graval_service: V1Service):
+async def gather_gpu_info(
+    node_object: V1Node, graval_deployment: V1Deployment, graval_service: V1Service
+):
     """
     Wait for the graval bootstrap deployments to be ready, then gather the device info.
     """
@@ -67,11 +69,7 @@ async def deploy_graval(
 
     # Make sure the GPU labels are set.
     gpu_count = node_labels.get("gpu-count", "0")
-    if (
-        not gpu_count
-        or not gpu_count.isdigit()
-        or not 0 < (gpu_count := int(gpu_count)) <= 8
-    ):
+    if not gpu_count or not gpu_count.isdigit() or not 0 < (gpu_count := int(gpu_count)) <= 8:
         raise GPUlessServer(
             f"Kubernetes node {node_name} gpu-count label missing or invalid: {node_labels.get('gpu_count')}"
         )
@@ -159,14 +157,10 @@ async def deploy_graval(
         except Exception:
             ...
         try:
-            k8s_client.delete_namespaced_deployment(
-                name=f"graval-{node_name}", namespace="default"
-            )
+            k8s_client.delete_namespaced_deployment(name=f"graval-{node_name}", namespace="default")
         except Exception:
             ...
-        raise DeploymentFailure(
-            f"Failed to deploy GraVal: {str(exc)}:\n{traceback.format_exc()}"
-        )
+        raise DeploymentFailure(f"Failed to deploy GraVal: {str(exc)}:\n{traceback.format_exc()}")
 
 
 async def track_server(
@@ -201,11 +195,7 @@ async def track_server(
             if addr.type == "ExternalIP":
                 try:
                     ip = ipaddress.ip_address(addr.address)
-                    if (
-                        not ip.is_private
-                        and not ip.is_loopback
-                        and not ip.is_link_local
-                    ):
+                    if not ip.is_private and not ip.is_loopback and not ip.is_link_local:
                         ip_address = addr.address
                         break
                 except ValueError:

@@ -19,6 +19,4 @@ class Chute(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    deployments = relationship(
-        "Deployment", back_populates="chute", cascade="all, delete-orphan"
-    )
+    deployments = relationship("Deployment", back_populates="chute", cascade="all, delete-orphan")

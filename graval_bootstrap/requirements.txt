@@ -1,4 +1,0 @@
-fastapi==0.115.5
-uvicorn==0.32.0
-substrate-interface==1.7.11
-graval==0.0.3

@@ -12,16 +12,6 @@ from fastapi import FastAPI, Request, status, HTTPException
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--porter-host",
-        type=str,
-        default="0.0.0.0",
-    )
-    parser.add_argument(
-        "--porter-port",
-        type=int,
-        default=2222,
-    )
-    parser.add_argument(
         "--real-host",
         type=str,
         required=True,
@@ -65,9 +55,7 @@ def main():
             or miner_hotkey != args.hotkey
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="go away"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
         signature_string = ":".join(
             [
                 miner_hotkey,
@@ -76,18 +64,16 @@ def main():
                 "porter",
             ]
         )
-        if not Keypair(
-            ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519
-        ).verify(signature_string, bytes.fromhex(signature)):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="go away"
-            )
+        if not Keypair(ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519).verify(
+            signature_string, bytes.fromhex(signature)
+        ):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
         return {
             "host": args.real_host,
             "port": args.real_port,
         }
 
-    uvicorn.run(app=app, host=args.porter_host, port=args.porter_port)
+    uvicorn.run(app=app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":

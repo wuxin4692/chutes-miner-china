@@ -25,16 +25,6 @@ class Cipher(BaseModel):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--host",
-        type=str,
-        default="0.0.0.0",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=3333,
-    )
-    parser.add_argument(
         "--validator-whitelist",
         type=str,
         nargs="+",
@@ -107,7 +97,14 @@ def main():
         cipher = Cipher(**body)
         async with gpu_lock:
             miner.initialize(cipher.seed)
-            return {"plaintext": miner.decrypt(bytes.fromhex(cipher.ciphertext), bytes.fromhex(cipher.iv), cipher.length, cipher.device_id)}
+            return {
+                "plaintext": miner.decrypt(
+                    bytes.fromhex(cipher.ciphertext),
+                    bytes.fromhex(cipher.iv),
+                    cipher.length,
+                    cipher.device_id,
+                )
+            }
 
     @app.get("/challenge/info")
     async def info_challenge(request: Request, challenge: str):
@@ -117,7 +114,7 @@ def main():
         verify_request(request, args.validator_whitelist)
         return miner.process_device_info_challenge(challenge)
 
-    uvicorn.run(app=app, host=args.host, port=args.port)
+    uvicorn.run(app=app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
