@@ -1,8 +1,10 @@
 validators:
   defaultRegistry: registry.chutes.ai:5000
+  defaultApi: https://api.chutes.ai
   supported:
     - hotkey: 5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4
       registry: registry.chutes.ai:5000
+      api: https://api.chutes.ai
 
 minerApi:
   image: parachutes/miner:latest

@@ -27,7 +27,6 @@ def main():
     parser.add_argument(
         "--validator-whitelist",
         type=str,
-        nargs="+",
         required=True,
     )
     parser.add_argument(
@@ -38,7 +37,10 @@ def main():
     args = parser.parse_args()
 
     miner = Miner()
+    # Dummy init.
     gpu_count = miner.initialize(0)
+    miner._initialized = False
+    miner._init_seed = None
     app = FastAPI(
         title="GraVal bootstrap",
         description="GPU info plz",
@@ -95,12 +97,13 @@ def main():
         """
         request_body = await request.body()
         sha2 = hashlib.sha256(request_body).hexdigest()
-        verify_request(request, args.validator_whitelist, extra_key=sha2)
+        verify_request(request, args.validator_whitelist.split(","), extra_key=sha2)
         body = json.loads(request_body.decode())
-        print(json.dumps(body, indent=2))
         cipher = Cipher(**body)
         async with gpu_lock:
-            miner.initialize(cipher.seed)
+            if not miner._initialized or miner._init_seed != cipher.seed:
+                miner.initialize(cipher.seed)
+                miner._init_seed = cipher.seed
             return {
                 "plaintext": miner.decrypt(
                     bytes.fromhex(cipher.ciphertext),
@@ -115,7 +118,7 @@ def main():
         """
         Perform a device info challenge.
         """
-        verify_request(request, args.validator_whitelist)
+        verify_request(request, args.validator_whitelist.split(","))
         return miner.process_device_info_challenge(challenge)
 
     uvicorn.run(app=app, host="0.0.0.0", port=8000)

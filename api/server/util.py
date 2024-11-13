@@ -9,7 +9,6 @@ import asyncio
 import traceback
 from kubernetes.client import (
     V1Node,
-    CoreV1Api,
     V1Deployment,
     V1Service,
     V1ObjectMeta,
@@ -22,16 +21,17 @@ from kubernetes.client import (
     V1ServicePort,
     V1Probe,
     V1HTTPGetAction,
+    V1EnvVar,
     Watch,
 )
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from kubernetes.client.rest import ApiException
-from typing import Tuple
-from typing import Dict
+from typing import Tuple, Dict, List
 from api.config import settings
+from api.util import sse, now_str
 from api.database import get_db_session
-from api.server.schemas import Server
+from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU
 from api.exceptions import (
     DuplicateServer,
@@ -73,8 +73,7 @@ async def gather_gpu_info(
     node_object: V1Node,
     graval_deployment: V1Deployment,
     graval_service: V1Service,
-    k8s_client: CoreV1Api,
-):
+) -> List[GPU]:
     """
     Wait for the graval bootstrap deployments to be ready, then gather the device info.
     """
@@ -91,7 +90,7 @@ async def gather_gpu_info(
     deployment_ready = False
     try:
         async for event in watch.stream(
-            k8s_client.list_namespaced_deployment,
+            settings.core_k8s_client.list_namespaced_deployment,
             namespace=namespace,
             field_selector=f"metadata.name={deployment_name}",
             timeout_seconds=settings.graval_bootstrap_timeout,
@@ -158,7 +157,7 @@ async def gather_gpu_info(
 
 
 async def deploy_graval(
-    node_object: V1Node, k8s_client: CoreV1Api
+    node_object: V1Node,
 ) -> Tuple[V1Deployment, V1Service]:
     """
     Create a deployment of the GraVal base validation service on a node.
@@ -167,7 +166,7 @@ async def deploy_graval(
     node_labels = node_object.metadata.labels or {}
 
     # Double check that we don't already have chute deployments.
-    existing_deployments = k8s_client.list_namespaced_deployment(
+    existing_deployments = settings.core_k8s_client.list_namespaced_deployment(
         namespace=settings.namespace,
         label_selector="chute-deployment=true,app=graval-bootstrap",
         field_selector=f"spec.template.spec.nodeName={node_name}",
@@ -201,6 +200,21 @@ async def deploy_graval(
                         V1Container(
                             name="graval",
                             image=settings.graval_bootstrap_image,
+                            env=[
+                                V1EnvVar(
+                                    name="VALIDATOR_WHITELIST",
+                                    value=",".join(
+                                        [
+                                            validator["hotkey"]
+                                            for validator in settings.validators["supported"]
+                                        ]
+                                    ),
+                                ),
+                                V1EnvVar(
+                                    name="MINER_HOTKEY_SS58",
+                                    value=settings.miner_ss58,
+                                ),
+                            ],
                             resources=V1ResourceRequirements(
                                 requests={
                                     "cpu": str(gpu_count),
@@ -244,10 +258,10 @@ async def deploy_graval(
 
     # Deploy!
     try:
-        created_service = k8s_client.create_namespaced_service(
+        created_service = settings.core_k8s_client.create_namespaced_service(
             namespace=settings.namespace, body=service
         )
-        created_deployment = k8s_client.create_namespaced_deployment(
+        created_deployment = settings.core_k8s_client.create_namespaced_deployment(
             namespace=settings.namespace, body=deployment
         )
 
@@ -269,20 +283,22 @@ async def deploy_graval(
         return created_deployment, created_service
     except ApiException as exc:
         try:
-            k8s_client.delete_namespaced_service(
+            settings.core_k8s_client.delete_namespaced_service(
                 name=f"graval-service-{node_name}", namespace="default"
             )
         except Exception:
             ...
         try:
-            k8s_client.delete_namespaced_deployment(name=f"graval-{node_name}", namespace="default")
+            settings.core_k8s_client.delete_namespaced_deployment(
+                name=f"graval-{node_name}", namespace="default"
+            )
         except Exception:
             ...
         raise DeploymentFailure(f"Failed to deploy GraVal: {str(exc)}:\n{traceback.format_exc()}")
 
 
 async def track_server(
-    node_object: V1Node, k8s_client: CoreV1Api, add_labels: Dict[str, str] = None
+    node_object: V1Node, add_labels: Dict[str, str] = None
 ) -> Tuple[V1Node, Server]:
     """
     Track a new kubernetes (worker/GPU) node in our inventory.
@@ -299,12 +315,12 @@ async def track_server(
     if labels_to_add:
         current_labels.update(labels_to_add)
         body = {"metadata": {"labels": current_labels}}
-        node_object = k8s_client.patch_node(name=node_object.metadata.name, body=body)
+        node_object = settings.core_k8s_client.patch_node(name=node_object.metadata.name, body=body)
     labels = current_labels
 
     # Extract node information from kubernetes meta.
     name = node_object.metadata.name
-    kubernetes_id = node_object.metadata.uid
+    server_id = node_object.metadata.uid
 
     # Get public IP address if available.
     ip_address = None
@@ -332,7 +348,7 @@ async def track_server(
     # Track the server in our inventory.
     async with get_db_session() as session:
         server = Server(
-            server_id=kubernetes_id,
+            server_id=node_object.metadata.uid,
             name=name,
             ip_address=ip_address,
             status=status,
@@ -343,9 +359,48 @@ async def track_server(
             await session.commit()
         except IntegrityError as exc:
             if "UniqueViolationError" in str(exc):
-                raise DuplicateServer(f"Server {kubernetes_id} already in database.")
+                raise DuplicateServer(
+                    f"Server {server_id=} {name=} {server_id=} already in database."
+                )
             else:
                 raise
         await session.refresh(server)
 
     return node_object, server
+
+
+async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
+    """
+    Bootstrap a server from start to finish, yielding SSEs for miner to track status.
+    """
+    yield sse(
+        {
+            "timestamp": now_str(),
+            "message": f"attempting to add node server_id={node_object.metadata.uid} to inventory...",
+        }
+    )
+    node, server = await track_server(
+        node_object,
+        add_labels={"gpu-count": server_args.gpu_count, "gpu-short-ref": server_args.gpu_short_ref},
+    )
+
+    # Great, now it's in our database, but we need to startup graval so the validator can check the GPUs.
+    yield sse(
+        {
+            "timestamp": now_str(),
+            "message": f"server with server_id={node_object.metadata.uid} now tracked in database, provisioning graval...",
+        }
+    )
+    graval_dep, graval_svc = await deploy_graval(node)
+
+    # Excellent, now gather the GPU info.
+    yield sse(
+        {
+            "timestamp": now_str(),
+            "message": "graval bootstrap deployment/service created, gathering device info...",
+        }
+    )
+    gpus = await gather_gpu_info(server.server_id, node, graval_dep, graval_svc)
+
+    # Beautiful, tell the validators about it.
+    # XXX todo

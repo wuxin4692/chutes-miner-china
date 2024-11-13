@@ -2,11 +2,36 @@
 Server (kubernetes node) tracking ORM.
 """
 
+from pydantic import BaseModel, Field
+from typing import Literal
 from sqlalchemy import Column, String, DateTime, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from api.database import Base
+
+
+class ServerArgs(BaseModel):
+    name: str
+    gpu_count: int
+    gpu_short_ref: Literal[
+        "3090",
+        "4090",
+        "a5000",
+        "a6000",
+        "a6000_ada",
+        "l4",
+        "t4",
+        "a30",
+        "a40",
+        "l40",
+        "l40s",
+        "a100_40gb",
+        "a100",
+        "a100_sxm",
+        "h100",
+        "h100_sxm",
+    ] = Field(description="GPU model identifier")
 
 
 class Server(Base):

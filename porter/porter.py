@@ -26,7 +26,6 @@ def main():
     parser.add_argument(
         "--validator-whitelist",
         type=str,
-        nargs="+",
         required=True,
     )
     parser.add_argument(
@@ -51,7 +50,7 @@ def main():
         signature = request.headers.get("X-Chutes-Signature")
         if (
             any(not v for v in [miner_hotkey, validator_hotkey, nonce, signature])
-            or validator_hotkey not in args.validator_whitelist
+            or validator_hotkey not in args.validator_whitelist.split(",")
             or miner_hotkey != args.hotkey
             or int(time.time()) - int(nonce) >= 30
         ):
