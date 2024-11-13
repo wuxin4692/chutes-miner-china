@@ -2,7 +2,7 @@
 Individual GPU ORM.
 """
 
-from sqlalchemy import Column, String, ForeignKey, Boolean
+from sqlalchemy import Column, String, ForeignKey, Boolean, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from api.database import Base
@@ -13,6 +13,7 @@ class GPU(Base):
     __tablename__ = "gpus"
 
     gpu_id = Column(String, primarykey=True, nullable=False)
+    device_id = Column(Integer, nullable=False)
     server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     device_info = Column(JSONB, nullable=False)
     model_short_ref = Column(String, nullable=False)

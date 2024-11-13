@@ -2,6 +2,9 @@
 Server uility functions.
 """
 
+import time
+import aiohttp
+import asyncio
 import traceback
 from kubernetes.client import (
     V1Node,
@@ -16,6 +19,7 @@ from kubernetes.client import (
     V1ResourceRequirements,
     V1ServiceSpec,
     V1ServicePort,
+    Watch,
 )
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -25,26 +29,122 @@ from typing import Dict
 from api.config import settings
 from api.database import get_db_session
 from api.server.schemas import Server
+from api.gpu.schemas import GPU
 from api.exceptions import (
     DuplicateServer,
     NonEmptyServer,
     GPUlessServer,
     DeploymentFailure,
+    GraValBootstrapFailure,
 )
 import ipaddress
 
 
+async def _fetch_devices(url):
+    """
+    Query the GraVal bootstrap API for device info.
+    """
+    nonce = str(int(time.time()))
+    headers = {
+        "X-Chutes-Hotkey": settings.miner_ss58,
+        "X-Chutes-Validator": settings.miner_ss58,
+        "X-Chutes-Nonce": nonce,
+    }
+    headers["X-Chutes-Signature"] = settings.miner_keypair.sign(
+        ":".join([settings.miner_ss58, settings.miner_ss58, nonce, "graval"])
+    ).hex()
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
+        async with session.get(url, timeout=5) as response:
+            return (await response.json())["devices"]
+
+
 async def gather_gpu_info(
-    node_object: V1Node, graval_deployment: V1Deployment, graval_service: V1Service
+    server_id: str,
+    node_object: V1Node,
+    graval_deployment: V1Deployment,
+    graval_service: V1Service,
+    k8s_client: CoreV1Api,
 ):
     """
     Wait for the graval bootstrap deployments to be ready, then gather the device info.
     """
-    # wait for graval_deployment to be ready, handle provisioning failures
+    deployment_name = graval_deployment.metadata.name
+    namespace = graval_deployment.metadata.namespace or "chutes"
+    expected_gpu_count = int(node_object.metadata.labels.get("gpu-count", "0"))
+    gpu_short_ref = node_object.metadata.labels.get("gpu-short-ref")
+    if not gpu_short_ref:
+        raise GraValBootstrapFailure("Node does not have required gpu-short-ref label!")
 
-    # once ready, do an aiohttp GET to /devices on that service/deployment
+    # Wait for the bootstrap deployment to be ready.
+    watch = Watch()
+    start_time = time.time()
+    deployment_ready = False
+    try:
+        async for event in watch.stream(
+            k8s_client.list_namespaced_deployment,
+            namespace=namespace,
+            field_selector=f"metadata.name={deployment_name}",
+            timeout_seconds=settings.graval_bootstrap_timeout,
+        ):
+            deployment = event["object"]
+            if deployment.status.conditions:
+                for condition in deployment.status.conditions:
+                    if condition.type == "Failed" and condition.status == "True":
+                        raise GraValBootstrapFailure(f"Deployment failed: {condition.message}")
+            if (deployment.status.ready_replicas or 0) == deployment.spec.replicas:
+                deployment_ready = True
+                break
+            if (delta := time.time() - start_time) >= settings.graval_bootstrap_timeout:
+                raise TimeoutError(f"GraVal bootstrap deployment not ready after {delta} seconds!")
+            await asyncio.sleep(1)
+    except Exception as exc:
+        raise GraValBootstrapFailure(f"Error waiting for graval bootstrap deployment: {exc}")
+    if not deployment_ready:
+        raise GraValBootstrapFailure("GraVal bootstrap deployment never reached ready state.")
 
-    # ensure the {"gpus": [{...}, {...}]} count matches the node_object gpu-count label
+    # Configure our validation host/port.
+    node_port = None
+    node_ip = None
+    for port in graval_service.spec.ports:
+        if port.node_port:
+            node_port = port.node_port
+            break
+    for addr in node_object.status.addresses:
+        if addr.type == "ExternalIP":
+            node_ip = addr.address
+            break
+    if not node_port or not node_ip:
+        raise GraValBootstrapFailure("GraVal bootstrap service did not result in external IP/port")
+
+    # Query the GPU information.
+    devices = None
+    try:
+        devices = await _fetch_devices("http://{node_ip}:{node_port}/devices")
+        assert devices
+        assert len(devices) == expected_gpu_count
+    except Exception as exc:
+        raise GraValBootstrapFailure(
+            f"Failed to fetch devices from GraVal bootstrap: {node_ip}:{node_port}/devices: {exc}"
+        )
+
+    # Store inventory.
+    gpus = []
+    async with get_db_session() as session:
+        for device_id in range(len(devices)):
+            device_info = devices[device_id]
+            gpu = GPU(
+                server_id=server_id,
+                gpu_id=device_info["uuid"],
+                device_info=device_info,
+                model_short_ref=gpu_short_ref,
+                validated=False,
+            )
+            session.add(gpu)
+            gpus.append(gpu)
+        await session.commit()
+        for idx in range(len(gpus)):
+            await session.refresh(gpus[idx])
+    return gpus
 
 
 async def deploy_graval(
