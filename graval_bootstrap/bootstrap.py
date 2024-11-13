@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from graval.miner import Miner
 from substrateinterface import Keypair, KeypairType
 from fastapi import FastAPI, Request, status, HTTPException
+from fastapi.responses import PlainTextResponse
 
 
 class Cipher(BaseModel):
@@ -62,7 +63,7 @@ def main():
             or validator_hotkey not in whitelist
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away 0")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
         signature_string = ":".join(
             [
                 miner_hotkey,
@@ -74,9 +75,9 @@ def main():
         if not Keypair(ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519).verify(
             signature_string, bytes.fromhex(signature)
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away 1")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
 
-    @app.get("/ping")
+    @app.get("/ping", response_class=PlainTextResponse)
     async def ping():
         return "pong"
 
@@ -113,7 +114,7 @@ def main():
                 )
             }
 
-    @app.get("/challenge/info")
+    @app.get("/challenge/info", response_class=PlainTextResponse)
     async def info_challenge(request: Request, challenge: str):
         """
         Perform a device info challenge.
