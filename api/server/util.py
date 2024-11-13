@@ -92,7 +92,7 @@ async def deploy_graval(
                     containers=[
                         V1Container(
                             name="graval",
-                            image="parachutes/graval-bootstrap:latest",
+                            image=settings.graval_bootstrap_image,
                             resources=V1ResourceRequirements(
                                 requests={
                                     "cpu": str(gpu_count),

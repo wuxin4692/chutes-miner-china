@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     subtensor: str = os.getenv(
         "SUBTENSOR_ADDRESS", "wss://entrypoint-finney.opentensor.ai:443"
     )
+    graval_bootstrap_image: str = os.getenv("GRAVAL_IMAGE", "parachutes/graval-bootstrap:latest")
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 
 
