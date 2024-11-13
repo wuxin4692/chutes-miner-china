@@ -6,10 +6,17 @@ import os
 import json
 import redis.asyncio as redis
 from typing import Any
+from pydantic import BaseModel
 from substrateinterface import Keypair
 from pydantic_settings import BaseSettings
 from kubernets import client
 from kubernetes.config import load_kube_config, load_incluster_config
+
+
+class Validator(BaseModel):
+    hotkey: str
+    registry: str
+    api: str
 
 
 def create_kubernetes_client(cls: Any = client.CoreV1Api):
@@ -45,7 +52,9 @@ class Settings(BaseSettings):
     miner_keypair: Keypair = Keypair.create_from_seed(os.environ["MINER_SEED"])
     core_k8s_client: client.CoreV1Api = create_kubernetes_client()
     apps_k8s_client: client.AppsV1Api = create_kubernetes_client(cls=client.AppsV1Api)
-    validators: dict = json.loads(os.environ["VALIDATORS"])
+    validators: dict = [
+        Validator(**item) for item in json.loads(os.environ["VALIDATORS"]["supported"])
+    ]
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 
 

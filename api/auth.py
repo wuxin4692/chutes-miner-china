@@ -3,6 +3,10 @@ Authentication helpers.
 """
 
 import time
+import hashlib
+import orjson as json
+from loguru import logger
+from typing import Dict, Any
 from functools import lru_cache
 from substrateinterface import Keypair, KeypairType
 from fastapi import Request, status, HTTPException, Header
@@ -33,9 +37,7 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
         if allow_miner:
             allowed_signers.append(settings.miner_ss58)
         if allow_validator:
-            allowed_signers += [
-                validator["hotkey"] for validator in settings.validators["supported"]
-            ]
+            allowed_signers += [validator.hotkey for validator in settings.validators]
         if (
             any(not v for v in [miner, validator, nonce, signature])
             or miner != settings.miner_ss58
@@ -55,3 +57,56 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
 
     return _authorize
+
+
+def get_signing_message(
+    hotkey: str,
+    nonce: str,
+    payload_str: str | bytes | None,
+    purpose: str | None = None,
+    payload_hash: str | None = None,
+) -> str:
+    """
+    Get the signing message for a given hotkey, nonce, and payload.
+    """
+    if payload_str:
+        if isinstance(payload_str, str):
+            payload_str = payload_str.encode()
+        return f"{hotkey}:{nonce}:{hashlib.sha256(payload_str).hexdigest()}"
+    elif purpose:
+        return f"{hotkey}:{nonce}:{purpose}"
+    elif payload_hash:
+        return f"{hotkey}:{nonce}:{payload_hash}"
+    else:
+        raise ValueError("Either payload_str or purpose must be provided")
+
+
+def sign_request(payload: Dict[str, Any] | str | None = None, purpose: str = None):
+    """
+    Generate a signed request (for miner requests to validators).
+    """
+    nonce = str(int(time.time()))
+    headers = {
+        MINER_HEADER: settings.miner_ss58,
+        NONCE_HEADER: nonce,
+    }
+    signature_string = None
+    if payload is not None:
+        if isinstance(payload, dict):
+            headers["Content-Type"] = "application/json"
+            payload_string = json.dumps(payload)
+        else:
+            payload_string = payload
+        signature_string = get_signing_message(
+            settings.miner_ss58,
+            nonce,
+            payload_str=payload_string,
+            purpose=None,
+        )
+    else:
+        signature_string = get_signing_message(
+            settings.miner_ss58, nonce, payload_str=None, purpose=purpose
+        )
+    logger.debug(f"Signing message: {signature_string}")
+    headers[SIGNATURE_HEADER] = settings.miner_keypair.sign(signature_string.encode()).hex()
+    return headers, payload_string

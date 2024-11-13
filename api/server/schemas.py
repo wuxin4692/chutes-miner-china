@@ -4,7 +4,7 @@ Server (kubernetes node) tracking ORM.
 
 from pydantic import BaseModel, Field
 from typing import Literal
-from sqlalchemy import Column, String, DateTime, Integer
+from sqlalchemy import Column, String, DateTime, Integer, BigInteger
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -44,6 +44,7 @@ class Server(Base):
     status = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     labels = Column(JSONB, nullable=False)
+    seed = Column(BigInteger)
 
     gpus = relationship("GPU", back_populates="server")
     chutes = relationship("Chute", back_populates="server")

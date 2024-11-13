@@ -7,6 +7,7 @@ import backoff
 import aiohttp
 import asyncio
 import traceback
+from loguru import logger
 from kubernetes.client import (
     V1Node,
     V1Deployment,
@@ -28,8 +29,9 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from kubernetes.client.rest import ApiException
 from typing import Tuple, Dict, List
-from api.config import settings
-from api.util import sse, now_str
+from api.auth import sign_request
+from api.config import settings, Validator
+from api.util import sse_message
 from api.database import get_db_session
 from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU
@@ -204,10 +206,7 @@ async def deploy_graval(
                                 V1EnvVar(
                                     name="VALIDATOR_WHITELIST",
                                     value=",".join(
-                                        [
-                                            validator["hotkey"]
-                                            for validator in settings.validators["supported"]
-                                        ]
+                                        [validator.hotkey for validator in settings.validators]
                                     ),
                                 ),
                                 V1EnvVar(
@@ -284,13 +283,15 @@ async def deploy_graval(
     except ApiException as exc:
         try:
             settings.core_k8s_client.delete_namespaced_service(
-                name=f"graval-service-{node_name}", namespace="default"
+                name=f"graval-service-{node_name}",
+                namespace=settings.namespace,
             )
         except Exception:
             ...
         try:
             settings.core_k8s_client.delete_namespaced_deployment(
-                name=f"graval-{node_name}", namespace="default"
+                name=f"graval-{node_name}",
+                namespace=settings.namespace,
             )
         except Exception:
             ...
@@ -369,38 +370,127 @@ async def track_server(
     return node_object, server
 
 
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=5,
+)
+async def _advertise_nodes(validator: Validator, gpus: List[GPU]):
+    """
+    Post GPU information to one validator, with retries.
+    """
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
+        headers, payload_string = sign_request(payload=[gpu.dict() for gpu in gpus])
+        async with session.post(validator.api, data=payload_string, headers=headers) as response:
+            nodes = await response.json()
+            logger.success(
+                f"Successfully advertised {len(gpus)} to {validator.hotkey} via {validator.api}"
+            )
+            return nodes
+
+
 async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
     """
     Bootstrap a server from start to finish, yielding SSEs for miner to track status.
     """
-    yield sse(
-        {
-            "timestamp": now_str(),
-            "message": f"attempting to add node server_id={node_object.metadata.uid} to inventory...",
-        }
-    )
-    node, server = await track_server(
-        node_object,
-        add_labels={"gpu-count": server_args.gpu_count, "gpu-short-ref": server_args.gpu_short_ref},
-    )
+    started_at = time.time()
 
-    # Great, now it's in our database, but we need to startup graval so the validator can check the GPUs.
-    yield sse(
-        {
-            "timestamp": now_str(),
-            "message": f"server with server_id={node_object.metadata.uid} now tracked in database, provisioning graval...",
-        }
-    )
-    graval_dep, graval_svc = await deploy_graval(node)
+    async def _cleanup(delete_node=True):
+        node_name = node_object.metadata.name
+        node_uid = node_object.metadata.uid
+        try:
+            settings.core_k8s_client.delete_namespaced_service(
+                name=f"graval-service-{node_name}", namespace=settings.namespace
+            )
+        except Exception:
+            ...
+        try:
+            settings.core_k8s_client.delete_namespaced_deployment(
+                name=f"graval-{node_name}", namespace=settings.namespace
+            )
+        except Exception:
+            ...
+        if delete_node:
+            async with get_db_session() as session:
+                node = (
+                    await session.query(Server).where(Server.server_id == node_uid)
+                ).scalar_one_or_none()
+                if node:
+                    session.delete(node)
+                await session.commit()
 
-    # Excellent, now gather the GPU info.
-    yield sse(
-        {
-            "timestamp": now_str(),
-            "message": "graval bootstrap deployment/service created, gathering device info...",
-        }
+    yield sse_message(
+        f"attempting to add node server_id={node_object.metadata.uid} to inventory...",
     )
-    gpus = await gather_gpu_info(server.server_id, node, graval_dep, graval_svc)
+    seed = None
+    try:
+        node, server = await track_server(
+            node_object,
+            add_labels={
+                "gpu-count": server_args.gpu_count,
+                "gpu-short-ref": server_args.gpu_short_ref,
+            },
+        )
 
-    # Beautiful, tell the validators about it.
-    # XXX todo
+        # Great, now it's in our database, but we need to startup graval so the validator can check the GPUs.
+        yield sse_message(
+            f"server with server_id={node_object.metadata.uid} now tracked in database, provisioning graval...",
+        )
+        graval_dep, graval_svc = await deploy_graval(node)
+
+        # Excellent, now gather the GPU info.
+        yield sse_message(
+            "graval bootstrap deployment/service created, gathering device info...",
+        )
+        gpus = await gather_gpu_info(server.server_id, node, graval_dep, graval_svc)
+
+        # Beautiful, tell the validators about it.
+        model_name = gpus[0]["name"]
+        yield sse_message(
+            f"discovered {len(gpus)} GPUs [{model_name=}] on node, advertising node to {len(settings.validators)} validator(s)...",
+        )
+        for validator in settings.validators:
+            yield sse_message(
+                f"advertising node to {validator.hotkey} via {validator.api}...",
+            )
+            validator_nodes = None
+            try:
+                validator_nodes = await _advertise_nodes(validator, gpus)
+            except Exception as exc:
+                yield sse_message(
+                    f"failed to advertising node to {validator.hotkey} via {validator.api}: {exc}",
+                )
+                raise
+            assert (
+                len(set(node["seed"] for node in validator_nodes)) == 1
+            ), f"more than one seed produced from {validator.hotkey}!"
+            if not seed:
+                seed = validator_nodes[0]["seed"]
+            else:
+                assert (
+                    seed == validator_nodes[0]["seed"]
+                ), f"validators produced differing seeds {seed} vs {validator_nodes[0]['seed']}"
+            yield sse_message(
+                f"successfully advertised node {node_object.metadata.uid} to validator {validator.hotkey}, received seed: {seed}"
+            )
+            async with get_db_session() as session:
+                await session.execute(
+                    update(Server)
+                    .where(Server.server_id == node_object.metadata.uid)
+                    .values({"seed": seed})
+                )
+                await session.commit()
+    except Exception as exc:
+        error_message = (
+            f"unhandled exception bootstrapping new node: {exc}\n{traceback.format_exc()}"
+        )
+        logger.error(error_message)
+        yield sse_message(error_message)
+        await _cleanup(delete_node=True)
+    finally:
+        await _cleanup(delete_node=False)
+
+    # Astonishing, everything worked.
+    yield sse_message(f"completed server bootstrapping in {time.time() - started_at} seconds!")
