@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     )
     netuid: int = int(os.getenv("NETUID", "19"))
     subtensor: str = os.getenv("SUBTENSOR_ADDRESS", "wss://entrypoint-finney.opentensor.ai:443")
+    namespace: str = os.getenv("CHUTES_NAMESPACE", "chutes")
     graval_bootstrap_image: str = os.getenv(
         "GRAVAL_BOOTSTRAP_IMAGE", "parachutes/graval-bootstrap:latest"
     )

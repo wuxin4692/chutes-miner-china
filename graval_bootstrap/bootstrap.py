@@ -74,6 +74,10 @@ def main():
         ):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away 1")
 
+    @app.get("/ping")
+    async def ping():
+        return "pong"
+
     @app.get("/devices")
     async def get_devices(request: Request):
         """

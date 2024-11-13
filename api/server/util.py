@@ -3,6 +3,7 @@ Server uility functions.
 """
 
 import time
+import backoff
 import aiohttp
 import asyncio
 import traceback
@@ -19,6 +20,8 @@ from kubernetes.client import (
     V1ResourceRequirements,
     V1ServiceSpec,
     V1ServicePort,
+    V1Probe,
+    V1HTTPGetAction,
     Watch,
 )
 from sqlalchemy import update
@@ -40,6 +43,13 @@ from api.exceptions import (
 import ipaddress
 
 
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=5,
+)
 async def _fetch_devices(url):
     """
     Query the GraVal bootstrap API for device info.
@@ -204,6 +214,14 @@ async def deploy_graval(
                                 },
                             ),
                             ports=[{"containerPort": 8000}],
+                            readiness_probe=V1Probe(
+                                http_get=V1HTTPGetAction(path="/ping", port=8000),
+                                initial_delay_seconds=45,
+                                period_seconds=10,
+                                timeout_seconds=1,
+                                success_threshold=1,
+                                failure_threshold=3,
+                            ),
                         )
                     ],
                 ),
