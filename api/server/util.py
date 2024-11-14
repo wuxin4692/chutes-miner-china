@@ -383,12 +383,44 @@ async def _advertise_nodes(validator: Validator, gpus: List[GPU]):
     """
     async with aiohttp.ClientSession(raise_for_status=True) as session:
         headers, payload_string = sign_request(payload=[gpu.dict() for gpu in gpus])
-        async with session.post(validator.api, data=payload_string, headers=headers) as response:
-            nodes = await response.json()
+        async with session.post(
+            f"{validator.api}/nodes/", data=payload_string, headers=headers
+        ) as response:
+            data = await response.json()
+            nodes = data.get("nodes")
+            task_id = data.get("task_id")
+            assert len(nodes) == len(gpus)
+            assert task_id
             logger.success(
                 f"Successfully advertised {len(gpus)} to {validator.hotkey} via {validator.api}"
             )
-            return nodes
+            return task_id, nodes
+
+
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=5,
+)
+async def check_verification_task_status(validator: Validator, task_id: str) -> bool:
+    """
+    Check the GPU verification task status.
+    """
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
+        headers, payload_string = sign_request(payload=None, purpose="graval")
+        async with session.get(
+            f"{validator.api}/nodes/verification_status",
+            params={"task_id": task_id},
+            headers=headers,
+        ) as response:
+            data = await response.json()
+            if (status := data.get("status")) == "pending":
+                return None
+            if status in ["error", "failed"]:
+                return False
+            return True
 
 
 async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
@@ -456,8 +488,9 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
                 f"advertising node to {validator.hotkey} via {validator.api}...",
             )
             validator_nodes = None
+            task_id = None
             try:
-                validator_nodes = await _advertise_nodes(validator, gpus)
+                task_id, validator_nodes = await _advertise_nodes(validator, gpus)
             except Exception as exc:
                 yield sse_message(
                     f"failed to advertising node to {validator.hotkey} via {validator.api}: {exc}",
@@ -482,6 +515,22 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
                     .values({"seed": seed})
                 )
                 await session.commit()
+
+            # Wait for verification from this validator.
+            while (status := await check_verification_task_status(validator, task_id)) is None:
+                yield sse_message(
+                    f"waiting for validator {validator.hotkey} to finish GPU verification..."
+                )
+                await asyncio.sleep(1)
+            if status:
+                yield sse_message(
+                    f"validator {validator.hotkey} has successfully performed GPU verification"
+                )
+            else:
+                error_message = f"GPU verification failed for {validator.hotkey}, aborting!"
+                yield sse_message(error_message)
+                GraValBootstrapFailure(error_message)
+
     except Exception as exc:
         error_message = (
             f"unhandled exception bootstrapping new node: {exc}\n{traceback.format_exc()}"

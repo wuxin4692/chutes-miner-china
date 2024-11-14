@@ -26,6 +26,11 @@ class Cipher(BaseModel):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+    )
+    parser.add_argument(
         "--validator-whitelist",
         type=str,
         required=True,
@@ -122,7 +127,7 @@ def main():
         verify_request(request, args.validator_whitelist.split(","))
         return miner.process_device_info_challenge(challenge)
 
-    uvicorn.run(app=app, host="0.0.0.0", port=8000)
+    uvicorn.run(app=app, host="0.0.0.0", port=args.port)
 
 
 if __name__ == "__main__":
