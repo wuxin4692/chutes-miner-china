@@ -21,3 +21,7 @@ chute-deployment: "true"
 {{- define "bootstrap.labels" -}}
 node-bootstrap: "true"
 {{- end }}
+
+{{- define "porter.labels" -}}
+app.kubernetes.io/name: chutes-porter
+{{- end }}

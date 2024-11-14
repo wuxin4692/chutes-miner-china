@@ -1,0 +1,52 @@
+{{- if .Values.porter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chutes-miner-porter
+  labels:
+    {{- include "porter.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "porter.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "porter.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.porter.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.porter.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.porter.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: porter
+          image: "{{ .Values.porter.image }}"
+          imagePullPolicy: {{ .Values.porter.imagePullPolicy }}
+          env:
+            - name: REAL_AXON_HOST
+              value: {{ .Values.porter.real_host }}
+            - name: REAL_AXON_IP
+              value: "{{ .Values.porter.real_port }}"
+            - name: MINER_HOTKEY_SS58
+              valueFrom:
+                secretKeyRef:
+                  name: miner-credentials
+                  key: ss58
+            - name: VALIDATOR_WHITELIST
+              value: {{ range $index, $validator := .Values.validators.supported }}{{ if $index }},{{ end }}{{ $validator.hotkey }}{{ end }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.porter.resources | nindent 12 }}
+{{- end }}
