@@ -538,8 +538,14 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         logger.error(error_message)
         yield sse_message(error_message)
         await _cleanup(delete_node=True)
+        raise
     finally:
         await _cleanup(delete_node=False)
 
     # Astonishing, everything worked.
+    async with get_db_session() as session:
+        await session.execute(
+            update(GPU).where(GPU.server_id == node_object.metadata.uid).values({"verified": True})
+        )
+        await session.commit()
     yield sse_message(f"completed server bootstrapping in {time.time() - started_at} seconds!")

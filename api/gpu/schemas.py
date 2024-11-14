@@ -17,7 +17,7 @@ class GPU(Base):
     server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     device_info = Column(JSONB, nullable=False)
     model_short_ref = Column(String, nullable=False)
-    validated = Column(Boolean, default=False)
+    verified = Column(Boolean, default=False)
 
     server = relationship("Server", back_populates="gpus")
     deployments = relationship("Deployment", secondary=deployment_gpus, back_populates="gpus")
