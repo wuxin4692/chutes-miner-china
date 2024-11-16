@@ -1,0 +1,224 @@
+- name: Setup Kubernetes Node
+  hosts: all
+  become: yes
+  vars:
+    username: "{{ user }}"
+    ssh_public_key: "{{ ssh_key }}"
+    microk8s_channel: "1.31/stable"
+    enable_gpu: "{{ gpu_enabled | default(false) }}"
+
+  tasks:
+    - name: Set environment variables
+      shell: |
+        export DEBIAN_FRONTEND=noninteractive
+        export NEEDRESTART_SUSPEND=y
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Stop and disable unattended upgrades
+      systemd:
+        name: unattended-upgrades
+        state: stopped
+        enabled: no
+
+    - name: Create user
+      user:
+        name: "{{ username }}"
+        shell: /bin/bash
+        create_home: yes
+        state: present
+
+    - name: Create SSH directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0700'
+      with_items:
+        - "/home/{{ username }}/.ssh"
+        - "/root/.ssh"
+
+    - name: Add authorized SSH keys
+      copy:
+        content: "{{ ssh_public_key }}"
+        dest: "{{ item }}"
+        mode: '0700'
+      with_items:
+        - "/home/{{ username }}/.ssh/authorized_keys"
+        - "/root/.ssh/authorized_keys"
+
+    - name: Set correct ownership for user home
+      file:
+        path: "/home/{{ username }}"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        recurse: yes
+
+    - name: Add user to sudoers
+      lineinfile:
+        path: /etc/sudoers
+        line: '{{ username }} ALL=(ALL) NOPASSWD:ALL'
+        validate: 'visudo -cf %s'
+
+    - name: Remove old containerd if exists
+      apt:
+        name: containerd.io
+        state: absent
+
+    - name: Install basic system prerequisites
+      apt:
+        name:
+          - vim
+          - jq
+          - bc
+          - libclang-dev
+          - npm
+          - clang
+          - libssl-dev
+          - llvm
+          - libudev-dev
+          - protobuf-compiler
+          - python3
+          - python3-pip
+          - python3-venv
+          - docker.io
+          - docker-compose
+          - build-essential
+          - nginx
+          - redis
+          - net-tools
+          - ffmpeg
+          - rsyslog
+          - libpq-dev
+        state: present
+
+    - name: Create libstdc++ symlink if needed
+      file:
+        src: /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
+        dest: /usr/lib/libstdc++.so
+        state: link
+      when: not ansible_check_mode and not path.stat.exists
+
+    - name: Set vim as default editor
+      alternatives:
+        name: editor
+        path: /usr/bin/vim
+        priority: 1
+
+    - name: GPU Setup Tasks
+      when: enable_gpu | bool
+      block:
+        - name: Purge existing NVIDIA/CUDA packages
+          shell: |
+            dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}' | xargs apt -y remove --allow-change-held-packages
+            dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}' | xargs dpkg --purge
+          ignore_errors: yes
+
+        - name: Download and install CUDA keyring
+          block:
+            - get_url:
+                url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+                dest: /tmp/cuda-keyring.deb
+            - apt:
+                deb: /tmp/cuda-keyring.deb
+
+        - name: Install NVIDIA packages
+          apt:
+            name:
+              - cuda-toolkit-12-7
+              - nvidia-open-565
+              - nvidia-fabricmanager-565
+              - linux-nvidia-hwe-22.04
+            state: present
+
+        - name: Configure NVIDIA Fabric Manager
+          systemd:
+            name: nvidia-fabricmanager
+            enabled: yes
+            masked: no
+
+        - name: Set NVIDIA device permissions
+          file:
+            path: "{{ item }}"
+            mode: '0666'
+          with_fileglob:
+            - /dev/nvidia*
+            - /dev/nvidiactl
+            - /dev/nvidia-uvm
+            - /dev/nvidia-uvm-tools
+
+        - name: Create NVIDIA character device symlinks
+          shell: |
+            ls /dev/nvidia? | egrep 'nvidia[0-9]' | while read i
+            do
+              N=$(echo $i | sed 's/\/dev\/nvidia//');
+              MAJ=$(ls -l $i | awk '{print $5}' | cut -d, -f1)
+              MIN=$(ls -l $i | awk '{print $6}')
+              mkdir -p /dev/char/$MAJ:$MIN
+              ln -sf $i /dev/char/$MAJ:$MIN
+            done
+
+        - name: Install NVIDIA Container Toolkit
+          apt:
+            name: nvidia-container-toolkit
+            state: present
+
+        - name: Configure NVIDIA Container Toolkit
+          shell: |
+            nvidia-ctk runtime configure --runtime=docker --set-as-default
+            nvidia-ctk runtime configure --runtime=containerd --set-as-default
+            nvidia-ctk runtime configure --runtime=crio --set-as-default --config=/etc/crio/crio.conf.d/99-nvidia.conf
+
+    - name: Configure file limits
+      blockinfile:
+        path: /etc/security/limits.conf
+        block: |
+          * soft nofile 40000
+          * hard nofile 40001
+
+    - name: Configure PAM limits
+      lineinfile:
+        path: "{{ item }}"
+        line: "session required pam_limits.so"
+      with_items:
+        - /etc/pam.d/common-session
+        - /etc/pam.d/common-session-noninteractive
+
+    - name: Install MicroK8s
+      community.general.snap:
+        name: microk8s
+        channel: "{{ microk8s_channel }}"
+        classic: yes
+
+    - name: Enable MicroK8s storage
+      shell: microk8s enable hostpath-storage
+      ignore_errors: yes
+
+    - name: Start MicroK8s
+      shell: microk8s start
+      ignore_errors: yes
+
+    - name: Apply CNI configuration
+      kubernetes.core.k8s:
+        state: present
+        src: /var/snap/microk8s/current/args/cni-network/cni.yaml
+
+    - name: Install GPU Operator
+      kubernetes.core.helm:
+        name: gpu-operator
+        chart_ref: nvidia/gpu-operator
+        release_namespace: gpu-operator
+        create_namespace: yes
+        values:
+          toolkit:
+            env:
+              - name: CONTAINERD_CONFIG
+                value: /var/snap/microk8s/current/args/containerd-template.toml
+              - name: CONTAINERD_SOCKET
+                value: /var/snap/microk8s/common/run/containerd.sock
+              - name: CONTAINERD_RUNTIME_CLASS
+                value: nvidia
+              - name: CONTAINERD_SET_AS_DEFAULT
+                value: "true"
+      when: enable_gpu | bool
