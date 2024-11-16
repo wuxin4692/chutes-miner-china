@@ -93,28 +93,29 @@
           - libpq-dev
         state: present
 
-    - name: Create libstdc++ symlink if needed
-      file:
-        src: /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
-        dest: /usr/lib/libstdc++.so
-        state: link
-      when: not ansible_check_mode and not path.stat.exists
-
     - name: Set vim as default editor
       alternatives:
         name: editor
         path: /usr/bin/vim
         priority: 1
 
+    - name: Purge existing NVIDIA/CUDA packages
+      shell: |
+        PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}')
+        if [ ! -z "$PKGS" ]; then
+          echo "$PKGS" | xargs apt -y remove --allow-change-held-packages
+          echo "$PKGS" | xargs dpkg --purge
+        else
+          echo "No NVIDIA/CUDA packages found to remove"
+        fi
+      ignore_errors: no
+      register: purge_result
+      changed_when: "'No NVIDIA/CUDA packages found to remove' not in purge_result.stdout"
+      when: enable_gpu | bool
+
     - name: GPU Setup Tasks
       when: enable_gpu | bool
       block:
-        - name: Purge existing NVIDIA/CUDA packages
-          shell: |
-            dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}' | xargs apt -y remove --allow-change-held-packages
-            dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}' | xargs dpkg --purge
-          ignore_errors: yes
-
         - name: Download and install CUDA keyring
           block:
             - get_url:
@@ -126,9 +127,9 @@
         - name: Install NVIDIA packages
           apt:
             name:
-              - cuda-toolkit-12-7
-              - nvidia-open-565
-              - nvidia-fabricmanager-565
+              - cuda-toolkit-12-6
+              - nvidia-open-560
+              - nvidia-fabricmanager-560
               - linux-nvidia-hwe-22.04
             state: present
 
@@ -198,6 +199,28 @@
     - name: Start MicroK8s
       shell: microk8s start
       ignore_errors: yes
+
+    - name: Install kubernetes python package
+      pip:
+        name: kubernetes
+        state: present
+      become: yes
+
+    - name: Ensure .kube directory exists
+      file:
+        path: "~/.kube"
+        state: directory
+        mode: '0755'
+
+    - name: Generate kubeconfig from microk8s
+      shell: microk8s config > ~/.kube/config
+      args:
+        creates: "~/.kube/config"
+
+    - name: Set kubeconfig permissions
+      file:
+        path: "~/.kube/config"
+        mode: '0600'
 
     - name: Apply CNI configuration
       kubernetes.core.k8s:

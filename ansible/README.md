@@ -1,5 +1,7 @@
 # Node bootstrapping
 
+To ensure the highest probability of success, you should provision your servers with `Ubuntu 22.04`, preferably with NO nvidia driver installations if possible.
+
 ## 1. Install ansible (on your local system, not the miner node(s))
 
 ### Mac

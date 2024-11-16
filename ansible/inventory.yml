@@ -1,8 +1,26 @@
 all:
   hosts:
-    chutes-dev-1:
+    cpu-node-0:
+      ansible_host: 0.1.2.3
+      ansible_user: ubuntu
+      user: billybob
+      gpu_enabled: true
+      ssh_key: "ssh-rsa AAAA... billybob@machine"
+    gpu-node-0:
       ansible_host: 1.2.3.4
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true
       ssh_key: "ssh-rsa AAAA... billybob@machine"
+
+  children:
+    k8s_cluster:
+      children:
+        primary:
+          hosts:
+            cpu-node-0:
+              ansible_host: 0.1.2.3
+        workers:
+          hosts:
+            gpu-node-0:
+              ansible_host: 1.2.3.4
