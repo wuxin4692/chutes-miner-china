@@ -70,3 +70,24 @@ In this case:
 ```bash
 ansible-playbook -i inventory.yml site.yml
 ```
+
+## 5. Join the kubernetes nodes together
+
+If you have more than one host, you'll want to join all of the secondary nodes to the primary.
+```bash
+ansible-playbook -i inventory.yml join-cluster.yml
+```
+
+## 6. Adding a new node (carefully!)
+
+It could be very detrimental to re-run the entire playbook against all hosts, so you're best bet is to apply the playbook with `--limit new-hostname`, e.g.:
+```bash
+ansible-playbook -i inventory.yml site.yml --limit new-hostname
+```
+
+Then, manually run this on the primary kubernetes node:
+```bash
+microk8s add-node
+```
+
+Then, run that join command on the new host!

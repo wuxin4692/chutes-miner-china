@@ -108,10 +108,13 @@
         else
           echo "No NVIDIA/CUDA packages found to remove"
         fi
+        touch /tmp/nvidia.purged
       ignore_errors: no
       register: purge_result
       changed_when: "'No NVIDIA/CUDA packages found to remove' not in purge_result.stdout"
       when: enable_gpu | bool
+      args:
+        creates: /tmp/nvidia.purged
 
     - name: GPU Setup Tasks
       when: enable_gpu | bool
@@ -226,6 +229,23 @@
       kubernetes.core.k8s:
         state: present
         src: /var/snap/microk8s/current/args/cni-network/cni.yaml
+
+    - name: Install Helm
+      block:
+        - name: Download Helm installation script
+          get_url:
+            url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+            dest: /tmp/get_helm.sh
+            mode: '0700'
+
+        - name: Install Helm
+          shell: /tmp/get_helm.sh
+
+        - name: Add NVIDIA Helm repository
+          shell: |
+            helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
+            helm repo update
+      when: enable_gpu | bool
 
     - name: Install GPU Operator
       kubernetes.core.helm:
