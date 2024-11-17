@@ -99,22 +99,23 @@
         path: /usr/bin/vim
         priority: 1
 
+    - name: Check CUDA installation
+      apt:
+        name: cuda-toolkit-12-6
+        state: present
+      check_mode: yes
+      register: cuda_check
+      ignore_errors: yes
+
     - name: Purge existing NVIDIA/CUDA packages
       shell: |
         PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}')
         if [ ! -z "$PKGS" ]; then
           echo "$PKGS" | xargs apt -y remove --allow-change-held-packages
           echo "$PKGS" | xargs dpkg --purge
-        else
-          echo "No NVIDIA/CUDA packages found to remove"
         fi
-        touch /tmp/nvidia.purged
-      ignore_errors: no
-      register: purge_result
-      changed_when: "'No NVIDIA/CUDA packages found to remove' not in purge_result.stdout"
-      when: enable_gpu | bool
-      args:
-        creates: /tmp/nvidia.purged
+      ignore_errors: yes
+      when: cuda_check.failed or cuda_check.changed
 
     - name: GPU Setup Tasks
       when: enable_gpu | bool
@@ -209,26 +210,33 @@
         state: present
       become: yes
 
-    - name: Ensure .kube directory exists
-      file:
-        path: "~/.kube"
-        state: directory
-        mode: '0755'
+    - name: Setup Kubernetes access for user
+      block:
+        - name: Add user to microk8s group
+          user:
+            name: "{{ username }}"
+            groups: microk8s
+            append: yes
 
-    - name: Generate kubeconfig from microk8s
-      shell: microk8s config > ~/.kube/config
-      args:
-        creates: "~/.kube/config"
+        - name: Ensure .kube directory exists for user
+          file:
+            path: "/home/{{ username }}/.kube"
+            state: directory
+            mode: '0755'
+            owner: "{{ username }}"
+            group: "{{ username }}"
 
-    - name: Set kubeconfig permissions
-      file:
-        path: "~/.kube/config"
-        mode: '0600'
+        - name: Generate kubeconfig from microk8s
+          shell: microk8s config > /home/{{ username }}/.kube/config
+          args:
+            creates: "/home/{{ username }}/.kube/config"
 
-    - name: Apply CNI configuration
-      kubernetes.core.k8s:
-        state: present
-        src: /var/snap/microk8s/current/args/cni-network/cni.yaml
+        - name: Set kubeconfig permissions
+          file:
+            path: "/home/{{ username }}/.kube/config"
+            mode: '0600'
+            owner: "{{ username }}"
+            group: "{{ username }}"
 
     - name: Install Helm
       block:
@@ -247,21 +255,44 @@
             helm repo update
       when: enable_gpu | bool
 
-    - name: Install GPU Operator
-      kubernetes.core.helm:
-        name: gpu-operator
-        chart_ref: nvidia/gpu-operator
-        release_namespace: gpu-operator
-        create_namespace: yes
-        values:
-          toolkit:
-            env:
-              - name: CONTAINERD_CONFIG
-                value: /var/snap/microk8s/current/args/containerd-template.toml
-              - name: CONTAINERD_SOCKET
-                value: /var/snap/microk8s/common/run/containerd.sock
-              - name: CONTAINERD_RUNTIME_CLASS
-                value: nvidia
-              - name: CONTAINERD_SET_AS_DEFAULT
-                value: "true"
-      when: enable_gpu | bool
+    - name: Reboot
+      reboot:
+        msg: "Rebooting..."
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+
+    - name: Wait for system to be ready
+      wait_for_connection:
+        timeout: 600
+
+    - name: Wait for microk8s to be ready
+      shell: microk8s status | grep "microk8s is running"
+      register: result
+      until: result.rc == 0
+      retries: 30
+      delay: 10
+      ignore_errors: yes
+
+    - name: Enable NVidia GPU operator
+      shell: microk8s enable nvidia
+
+    - name: Fix NVidia cluster policy
+      shell: |
+        microk8s kubectl patch clusterpolicy cluster-policy --type=merge -n gpu-operator -p '
+        {
+          "spec": {
+            "validator": {
+              "driver": {
+                "env": [
+                  {
+                    "name": "DISABLE_DEV_CHAR_SYMLINK_CREATION",
+                    "value": "true"
+                  }
+                ]
+              }
+            }
+          }
+        }'
