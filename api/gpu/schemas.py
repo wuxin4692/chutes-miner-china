@@ -2,11 +2,16 @@
 Individual GPU ORM.
 """
 
+from pydantic import BaseModel
 from sqlalchemy import Column, String, ForeignKey, Boolean, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from api.database import Base
 from api.associations import deployment_gpus
+
+
+class VerificationArgs(BaseModel):
+    verified: bool
 
 
 class GPU(Base):
