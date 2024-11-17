@@ -128,6 +128,10 @@
             - apt:
                 deb: /tmp/cuda-keyring.deb
 
+        - name: Update apt cache
+          apt:
+            update_cache: yes
+
         - name: Install NVIDIA packages
           apt:
             name:
