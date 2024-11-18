@@ -72,6 +72,7 @@ postgres:
   image: postgres:15
   imagePullPolicy: IfNotPresent
   persistence:
+    enabled: true
     accessMode: ReadWriteOnce
     size: 100Gi
     storageClass: ""
@@ -234,10 +235,6 @@ squid:
       level2: 256
     readAheadSize: 1048576
     bufferSize: 1048576
-    quickAbort:
-      high: 100
-      low: 95
-      pct: 95
     workerThreads: 32
     pipelineRequests: 32
     refreshPatterns:
