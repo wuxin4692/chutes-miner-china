@@ -40,8 +40,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: miner-credentials
-                  key: hotkey.json
-                  jsonPath: '{.ss58Address}'
+                  key: ss58
             - name: VALIDATOR_WHITELIST
               value: {{ range $index, $validator := .Values.validators.supported }}{{ if $index }},{{ end }}{{ $validator.hotkey }}{{ end }}
           ports:

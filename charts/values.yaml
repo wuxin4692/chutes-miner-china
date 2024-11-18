@@ -10,6 +10,8 @@ porter:
   enabled: true
   real_host: 1.2.3.4
   real_port: 8000
+  image: parachutes/porter:latest
+  imagePullPolicy: IfNotPresent
   resources:
     requests:
       cpu: "250m"
