@@ -13,7 +13,6 @@ from api.database import Base
 
 class ServerArgs(BaseModel):
     name: str
-    gpu_count: int
     gpu_short_ref: Literal[
         "3090",
         "4090",

@@ -283,6 +283,10 @@
     - name: Enable NVidia GPU operator
       shell: microk8s enable nvidia
 
+    - name: Label kubernetes node
+      shell: |
+        microk8s kubectl label nodes {{ inventory_hostname }} external-ip={{ external_ip }} --overwrite
+
     - name: Fix NVidia cluster policy
       shell: |
         microk8s kubectl patch clusterpolicy cluster-policy --type=merge -n gpu-operator -p '

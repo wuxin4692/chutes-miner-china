@@ -82,7 +82,7 @@ async def gather_gpu_info(
     """
     deployment_name = graval_deployment.metadata.name
     namespace = graval_deployment.metadata.namespace or "chutes"
-    expected_gpu_count = int(node_object.metadata.labels.get("gpu-count", "0"))
+    expected_gpu_count = int(node_object.metadata.labels.get("nvidia.com/gpu.count", "0"))
     gpu_short_ref = node_object.metadata.labels.get("gpu-short-ref")
     if not gpu_short_ref:
         raise GraValBootstrapFailure("Node does not have required gpu-short-ref label!")
@@ -180,10 +180,10 @@ async def deploy_graval(
         )
 
     # Make sure the GPU labels are set.
-    gpu_count = node_labels.get("gpu-count", "0")
+    gpu_count = node_labels.get("nvidia.com/gpu.count", "0")
     if not gpu_count or not gpu_count.isdigit() or not 0 < (gpu_count := int(gpu_count)) <= 8:
         raise GPUlessServer(
-            f"Kubernetes node {node_name} gpu-count label missing or invalid: {node_labels.get('gpu_count')}"
+            f"Kubernetes node {node_name} nvidia.com/gpu.count label missing or invalid: {node_labels.get('nvidia.com/gpu.count')}"
         )
 
     # Create the deployment.
@@ -464,7 +464,6 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         node, server = await track_server(
             node_object,
             add_labels={
-                "gpu-count": server_args.gpu_count,
                 "gpu-short-ref": server_args.gpu_short_ref,
             },
         )
