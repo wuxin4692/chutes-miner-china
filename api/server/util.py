@@ -7,6 +7,7 @@ import backoff
 import aiohttp
 import asyncio
 import traceback
+import api.constants as cst
 from loguru import logger
 from kubernetes.client import (
     V1Node,
@@ -58,11 +59,11 @@ async def _fetch_devices(url):
     """
     nonce = str(int(time.time()))
     headers = {
-        "X-Chutes-Hotkey": settings.miner_ss58,
-        "X-Chutes-Validator": settings.miner_ss58,
-        "X-Chutes-Nonce": nonce,
+        cst.HOTKEY_HEADER: settings.miner_ss58,
+        cst.VALIDATOR_HEADER: settings.miner_ss58,
+        cst.NONCE_HEADER: nonce,
     }
-    headers["X-Chutes-Signature"] = settings.miner_keypair.sign(
+    headers[cst.SIGNATURE_HEADER] = settings.miner_keypair.sign(
         ":".join([settings.miner_ss58, settings.miner_ss58, nonce, "graval"])
     ).hex()
     async with aiohttp.ClientSession(raise_for_status=True) as session:
@@ -92,7 +93,7 @@ async def gather_gpu_info(
     deployment_ready = False
     try:
         async for event in watch.stream(
-            settings.core_k8s_client.list_namespaced_deployment,
+            settings.k8s_core_client().list_namespaced_deployment,
             namespace=namespace,
             field_selector=f"metadata.name={deployment_name}",
             timeout_seconds=settings.graval_bootstrap_timeout,
@@ -168,7 +169,7 @@ async def deploy_graval(
     node_labels = node_object.metadata.labels or {}
 
     # Double check that we don't already have chute deployments.
-    existing_deployments = settings.core_k8s_client.list_namespaced_deployment(
+    existing_deployments = settings.k8s_core_client().list_namespaced_deployment(
         namespace=settings.namespace,
         label_selector="chute-deployment=true,app=graval-bootstrap",
         field_selector=f"spec.template.spec.nodeName={node_name}",
@@ -257,10 +258,10 @@ async def deploy_graval(
 
     # Deploy!
     try:
-        created_service = settings.core_k8s_client.create_namespaced_service(
+        created_service = settings.k8s_core_client().create_namespaced_service(
             namespace=settings.namespace, body=service
         )
-        created_deployment = settings.core_k8s_client.create_namespaced_deployment(
+        created_deployment = settings.k8s_core_client().create_namespaced_deployment(
             namespace=settings.namespace, body=deployment
         )
 
@@ -282,14 +283,14 @@ async def deploy_graval(
         return created_deployment, created_service
     except ApiException as exc:
         try:
-            settings.core_k8s_client.delete_namespaced_service(
+            settings.k8s_core_client().delete_namespaced_service(
                 name=f"graval-service-{node_name}",
                 namespace=settings.namespace,
             )
         except Exception:
             ...
         try:
-            settings.core_k8s_client.delete_namespaced_deployment(
+            settings.k8s_core_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}",
                 namespace=settings.namespace,
             )
@@ -316,7 +317,9 @@ async def track_server(
     if labels_to_add:
         current_labels.update(labels_to_add)
         body = {"metadata": {"labels": current_labels}}
-        node_object = settings.core_k8s_client.patch_node(name=node_object.metadata.name, body=body)
+        node_object = settings.k8s_core_client().patch_node(
+            name=node_object.metadata.name, body=body
+        )
     labels = current_labels
 
     # Extract node information from kubernetes meta.
@@ -433,13 +436,13 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         node_name = node_object.metadata.name
         node_uid = node_object.metadata.uid
         try:
-            settings.core_k8s_client.delete_namespaced_service(
+            settings.k8s_core_client().delete_namespaced_service(
                 name=f"graval-service-{node_name}", namespace=settings.namespace
             )
         except Exception:
             ...
         try:
-            settings.core_k8s_client.delete_namespaced_deployment(
+            settings.k8s_core_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}", namespace=settings.namespace
             )
         except Exception:

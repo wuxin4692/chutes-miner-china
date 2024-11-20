@@ -10,7 +10,13 @@ from typing import Dict, Any
 from functools import lru_cache
 from substrateinterface import Keypair, KeypairType
 from fastapi import Request, status, HTTPException, Header
-from api.constants import MINER_HEADER, VALIDATOR_HEADER, SIGNATURE_HEADER, NONCE_HEADER
+from api.constants import (
+    HOTKEY_HEADER,
+    MINER_HEADER,
+    VALIDATOR_HEADER,
+    SIGNATURE_HEADER,
+    NONCE_HEADER,
+)
 from api.config import settings
 
 
@@ -87,10 +93,11 @@ def sign_request(payload: Dict[str, Any] | str | None = None, purpose: str = Non
     """
     nonce = str(int(time.time()))
     headers = {
-        MINER_HEADER: settings.miner_ss58,
+        HOTKEY_HEADER: settings.miner_ss58,
         NONCE_HEADER: nonce,
     }
     signature_string = None
+    payload_string = None
     if payload is not None:
         if isinstance(payload, dict):
             headers["Content-Type"] = "application/json"

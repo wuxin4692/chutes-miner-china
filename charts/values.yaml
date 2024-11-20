@@ -5,6 +5,7 @@ validators:
     - hotkey: 5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4
       registry: registry.chutes.ai:5000
       api: https://api.chutes.ai
+      socket: wss://ws.chutes.ai
 
 porter:
   enabled: true
