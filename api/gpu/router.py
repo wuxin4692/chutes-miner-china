@@ -35,7 +35,7 @@ async def update_gpu(
     await db.refresh(gpu)
     if gpu.verified:
         await settings.redis_client.publish(
-            "inventory",
+            "miner_events",
             json.dumps(
                 {
                     "event_type": "gpu_added",
