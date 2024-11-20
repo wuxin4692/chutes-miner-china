@@ -13,6 +13,7 @@ from api.server.router import router as servers_router
 from api.gpu.router import router as gpus_router
 from api.database import Base, engine
 from api.config import settings
+from api.socket import SocketClient
 
 
 @asynccontextmanager
@@ -56,6 +57,11 @@ async def lifespan(_: FastAPI):
         logger.success("successfull applied all DB migrations")
     else:
         logger.error(f"failed to run db migrations returncode={process.returncode}")
+
+    # Start the websocket clients.
+    for validator in settings.validators:
+        socket_client = SocketClient(url=validator.socket)
+        asyncio.create_task(socket_client.connect_and_run())
 
 
 app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
