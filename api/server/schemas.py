@@ -13,6 +13,7 @@ from api.database import Base
 
 class ServerArgs(BaseModel):
     name: str
+    validator: str
     gpu_short_ref: Literal[
         "3090",
         "4090",
@@ -37,6 +38,7 @@ class Server(Base):
     __tablename__ = "servers"
 
     server_id = Column(String, primary_key=True)
+    validator = Column(String, nullable=False)
     name = Column(String, unique=True, nullable=False)
     ip_address = Column(String)
     verification_port = Column(Integer)

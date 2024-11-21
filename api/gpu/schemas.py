@@ -18,6 +18,7 @@ class GPU(Base):
     __tablename__ = "gpus"
 
     gpu_id = Column(String, primarykey=True, nullable=False)
+    validator = Column(String)
     device_id = Column(Integer, nullable=False)
     server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     device_info = Column(JSONB, nullable=False)

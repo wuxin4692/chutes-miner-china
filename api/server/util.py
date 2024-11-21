@@ -73,6 +73,7 @@ async def _fetch_devices(url):
 
 async def gather_gpu_info(
     server_id: str,
+    validator: str,
     node_object: V1Node,
     graval_deployment: V1Deployment,
     graval_service: V1Service,
@@ -146,6 +147,7 @@ async def gather_gpu_info(
             device_info = devices[device_id]
             gpu = GPU(
                 server_id=server_id,
+                validator=validator,
                 gpu_id=device_info["uuid"],
                 device_info=device_info,
                 model_short_ref=gpu_short_ref,
@@ -300,7 +302,7 @@ async def deploy_graval(
 
 
 async def track_server(
-    node_object: V1Node, add_labels: Dict[str, str] = None
+    validator: str, node_object: V1Node, add_labels: Dict[str, str] = None
 ) -> Tuple[V1Node, Server]:
     """
     Track a new kubernetes (worker/GPU) node in our inventory.
@@ -353,6 +355,7 @@ async def track_server(
     async with get_db_session() as session:
         server = Server(
             server_id=node_object.metadata.uid,
+            validator=validator,
             name=name,
             ip_address=ip_address,
             status=status,
@@ -462,6 +465,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
     seed = None
     try:
         node, server = await track_server(
+            server_args.validator,
             node_object,
             add_labels={
                 "gpu-short-ref": server_args.gpu_short_ref,
@@ -478,7 +482,9 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         yield sse_message(
             "graval bootstrap deployment/service created, gathering device info...",
         )
-        gpus = await gather_gpu_info(server.server_id, node, graval_dep, graval_svc)
+        gpus = await gather_gpu_info(
+            server.server_id, server_args.validator, node, graval_dep, graval_svc
+        )
 
         # Beautiful, tell the validators about it.
         model_name = gpus[0]["name"]
