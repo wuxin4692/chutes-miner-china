@@ -7,7 +7,7 @@ import orjson as json
 from loguru import logger
 from typing import Dict, Any
 from api.config import settings
-from api.pubsub import RedisListener
+from api.redis_pubsub import RedisListener
 from api.auth import sign_request
 
 
@@ -17,11 +17,12 @@ class Gepetto:
         Constructor.
         """
         self.pubsub = RedisListener()
-        self.setup_handlers()
         self.remote_chutes = {validator.hotkey: [] for validator in settings.validators}
         self.remote_images = {validator.hotkey: [] for validator in settings.validators}
         self.remote_instances = {validator.hotkey: [] for validator in settings.validators}
         self.remote_nodes = {validator.hotkey: [] for validator in settings.validators}
+        self.remote_metrics = {validator.hotkey: [] for validator in settings.validators}
+        # self.setup_handlers()
 
     def setup_handlers(self):
         """
@@ -62,8 +63,9 @@ class Gepetto:
             for clazz, id_field in (
                 ("chutes", "chute_id"),
                 ("images", "image_id"),
-                ("nodes", "node_id"),
+                ("nodes", "uuid"),
                 ("instances", "instance_id"),
+                ("metrics", "chute_id"),
             ):
                 logger.debug(f"Refreshing {clazz} from {validator.hotkey}...")
                 await self._remote_refresh_objects(

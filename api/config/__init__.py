@@ -6,7 +6,7 @@ import os
 import json
 import redis.asyncio as redis
 from functools import lru_cache
-from typing import Any
+from typing import Any, List
 from pydantic import BaseModel
 from substrateinterface import Keypair
 from pydantic_settings import BaseSettings
@@ -62,10 +62,13 @@ class Settings(BaseSettings):
     graval_bootstrap_timeout: int = int(os.getenv("GRAVAL_BOOTSTRAP_TIMEOUT", "300"))
     miner_ss58: str = os.environ["MINER_SS58"]
     miner_keypair: Keypair = Keypair.create_from_seed(os.environ["MINER_SEED"])
-    validators: dict = [
-        Validator(**item) for item in json.loads(os.environ["VALIDATORS"])["supported"]
-    ]
+    validators_json: str = os.environ["VALIDATORS"]
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+
+    @property
+    def validators(self) -> List[Validator]:
+        data = json.loads(self.validators_json)
+        return [Validator(**item) for item in data["supported"]]
 
 
 settings = Settings()
