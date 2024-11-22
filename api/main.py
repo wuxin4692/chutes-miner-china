@@ -13,7 +13,7 @@ from api.server.router import router as servers_router
 from api.gpu.router import router as gpus_router
 from api.database import Base, engine
 from api.config import settings
-from api.socket import SocketClient
+from api.socket_client import SocketClient
 
 
 @asynccontextmanager

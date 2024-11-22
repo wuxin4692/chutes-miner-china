@@ -46,6 +46,8 @@ class Server(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     labels = Column(JSONB, nullable=False)
     seed = Column(BigInteger)
+    cpu_per_gpu = Column(Integer, nullable=False, default=1)
+    memory_per_gpu = Column(Integer, nullable=False, default=1)
 
-    gpus = relationship("GPU", back_populates="server")
-    chutes = relationship("Chute", back_populates="server")
+    gpus = relationship("GPU", back_populates="server", lazy="joined")
+    deployments = relationship("Deployment", back_populates="server", lazy="joined")

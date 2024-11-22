@@ -96,9 +96,17 @@ class Gepetto:
         chutes_to_remove = set()
         all_chutes = set()
         async with SessionLocal() as session:
-            # Deployments of non-existent chutes.
+            # Clean up based on deployments/instances.
             async for row in await session.stream(select(Deployment)):
                 deployment = row[0]
+                if deployment.instance_id not in (
+                    self.remote_instances.get(deployment.validator) or {}
+                ):
+                    logger.warning(
+                        f"Deployment: {deployment.deployment_id} (instance_id={deployment.instance_id}) on validator {deployment.validator} not found"
+                    )
+                    tasks.append(self.undeploy(deployment.deployment_id))
+
                 if deployment.chute_id not in (self.remote_chutes.get(deployment.validator) or {}):
                     logger.warning(
                         f"Chute: {deployment.chute_id} version={deployment.version} on validator {deployment.validator} not found"

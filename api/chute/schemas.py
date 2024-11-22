@@ -4,7 +4,7 @@ ORM definitions for Chutes.
 
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime, Integer
 from sqlalchemy.dialects.postgresql import ARRAY
 from api.database import Base
 
@@ -16,8 +16,11 @@ class Chute(Base):
     validator = Column(String, nullable=False)
     name = Column(String)
     image = Column(String, nullable=False)
+    code = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
     version = Column(String, nullable=False)
     supported_gpus = Column(ARRAY(String), nullable=False)
+    gpu_count = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 

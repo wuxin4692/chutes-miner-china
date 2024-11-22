@@ -3,6 +3,7 @@ Server uility functions.
 """
 
 import time
+import math
 import backoff
 import aiohttp
 import asyncio
@@ -43,7 +44,6 @@ from api.exceptions import (
     DeploymentFailure,
     GraValBootstrapFailure,
 )
-import ipaddress
 
 
 @backoff.on_exception(
@@ -117,17 +117,11 @@ async def gather_gpu_info(
 
     # Configure our validation host/port.
     node_port = None
-    node_ip = None
+    node_ip = node_object.metadata.labels.get("chutes/external-ip")
     for port in graval_service.spec.ports:
         if port.node_port:
             node_port = port.node_port
             break
-    for addr in node_object.status.addresses:
-        if addr.type == "ExternalIP":
-            node_ip = addr.address
-            break
-    if not node_port or not node_ip:
-        raise GraValBootstrapFailure("GraVal bootstrap service did not result in external IP/port")
 
     # Query the GPU information.
     devices = None
@@ -173,7 +167,7 @@ async def deploy_graval(
     # Double check that we don't already have chute deployments.
     existing_deployments = settings.k8s_core_client().list_namespaced_deployment(
         namespace=settings.namespace,
-        label_selector="chute-deployment=true,app=graval-bootstrap",
+        label_selector="chute/chute=true,app=graval-bootstrap",
         field_selector=f"spec.template.spec.nodeName={node_name}",
     )
     if existing_deployments.items:
@@ -192,7 +186,7 @@ async def deploy_graval(
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"graval-{node_name}",
-            labels={"app": "graval", "chute-deployment": "false", "node": node_name},
+            labels={"app": "graval", "chute/chute": "false", "node": node_name},
         ),
         spec=V1DeploymentSpec(
             replicas=1,
@@ -327,19 +321,7 @@ async def track_server(
     # Extract node information from kubernetes meta.
     name = node_object.metadata.name
     server_id = node_object.metadata.uid
-
-    # Get public IP address if available.
-    ip_address = None
-    if node_object.status and node_object.status.addresses:
-        for addr in node_object.status.addresses:
-            if addr.type == "ExternalIP":
-                try:
-                    ip = ipaddress.ip_address(addr.address)
-                    if not ip.is_private and not ip.is_loopback and not ip.is_link_local:
-                        ip_address = addr.address
-                        break
-                except ValueError:
-                    continue
+    ip_address = node_object.metadata.labels.get("chutes/external-ip")
 
     # Determine node status.
     status = "Unknown"
@@ -351,6 +333,19 @@ async def track_server(
     if status != "Ready":
         raise ValueError(f"Node is not yet ready [{status=}]")
 
+    # Calculate CPU/RAM per GPU for allocation purposes.
+    gpu_count = int(node_object.labels["nvidia.com/gpu.count"])
+    cpu_per_gpu = math.floor(int(node_object.status.capacity["cpu"]) / gpu_count) - 1 or 1
+    memory_per_gpu = (
+        int(
+            math.floor(int(node_object.status.capacity["memory"].replace("Ki", "")) / gpu_count)
+            / 1024
+            / 1024
+        )
+        - 1
+        or 1
+    )
+
     # Track the server in our inventory.
     async with get_db_session() as session:
         server = Server(
@@ -360,6 +355,9 @@ async def track_server(
             ip_address=ip_address,
             status=status,
             labels=labels,
+            gpu_count=gpu_count,
+            cpu_per_gpu=cpu_per_gpu,
+            memory_per_gpu=memory_per_gpu,
         )
         session.add(server)
         try:
@@ -469,6 +467,8 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
             node_object,
             add_labels={
                 "gpu-short-ref": server_args.gpu_short_ref,
+                "chutes/validator": server_args.validator,
+                "chutes/worker": "true",
             },
         )
 

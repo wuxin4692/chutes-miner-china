@@ -285,7 +285,7 @@
 
     - name: Label kubernetes node
       shell: |
-        microk8s kubectl label nodes {{ inventory_hostname }} external-ip={{ external_ip }} --overwrite
+        microk8s kubectl label nodes {{ inventory_hostname }} chutes/external-ip={{ external_ip }} --overwrite
 
     - name: Fix NVidia cluster policy
       shell: |
