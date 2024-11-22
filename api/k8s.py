@@ -108,7 +108,27 @@ async def get_deployed_chutes() -> List[Dict]:
     return deployments
 
 
-async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
+async def undeploy(deployment_id: str):
+    """
+    Delete a deployment, and associated service.
+    """
+    try:
+        k8s_core_client().delete_namespaced_service(
+            name=f"chute-service-{deployment_id}",
+            namespace=settings.namespace,
+        )
+    except Exception as exc:
+        logger.warning(f"Error deleting deployment service from k8s: {exc}")
+    try:
+        k8s_core_client().delete_namespaced_deployment(
+            name=f"chute-{deployment_id}",
+            namespace=settings.namespace,
+        )
+    except Exception as exc:
+        logger.warning(f"Error deleting deployment from k8s: {exc}")
+
+
+async def deploy_chute(chute: Chute, server: Server):
     """
     Deploy a chute!
     """
@@ -135,6 +155,7 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
             version=chute.version,
             active=False,
             verified=False,
+            stub=True,
         )
         deployment.gpus = gpus
         session.add(deployment)
@@ -281,6 +302,7 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
                 raise DeploymentFailure("Deployment disappeared mid-flight!")
             deployment.host = server.ip_address
             deployment.port = deployment_port
+            deployment.stub = False
             await session.commit()
             await session.refresh(deployment)
 

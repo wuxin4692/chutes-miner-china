@@ -28,6 +28,7 @@ class Deployment(Base):
     version = Column(String, nullable=False)
     active = Column(Boolean, default=False)
     verified = Column(Boolean, default=False)
+    stub = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     gpus = relationship(
