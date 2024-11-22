@@ -4,6 +4,7 @@ Helper for kubernetes interactions.
 
 import math
 import uuid
+import traceback
 from loguru import logger
 from typing import List, Dict
 from kubernetes.client import (
@@ -20,12 +21,19 @@ from kubernetes.client import (
     V1Probe,
     V1HTTPGetAction,
     V1EnvVar,
+    V1Volume,
+    V1VolumeMount,
+    V1ConfigMapVolumeSource,
+    V1ConfigMap,
 )
+from kubernetes.client.rest import ApiException
+from sqlalchemy import select
+from api.exceptions import DeploymentFailure
+from api.config import settings
 from api.database import SessionLocal
 from api.server.schemas import Server
 from api.chute.schemas import Chute
 from api.deployment.schemas import Deployment
-from api.exceptions import DeploymentFailure
 from api.config import k8s_core_client, k8s_app_client
 
 
@@ -132,6 +140,26 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
         session.add(deployment)
         await session.commit()
 
+    # Enure the code is persisted as a configmap.
+    code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
+    config_map = V1ConfigMap(
+        metadata=V1ObjectMeta(
+            name=f"chute-code-{code_uuid}",
+            labels={
+                "chute/chute-id": chute.chute_id,
+                "chute/version": chute.version,
+            },
+        ),
+        data={chute.filename: chute.code},
+    )
+    try:
+        k8s_core_client().create_namespaced_config_map(
+            namespace=settings.namespace, body=config_map
+        )
+    except ApiException as e:
+        if e.status != 409:
+            raise
+
     # Create the deployment.
     deployment_id = str(uuid.uuid4())
     cpu = str(server.cpu_per_gpu * chute.gpu_count)
@@ -153,6 +181,14 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
                 metadata=V1ObjectMeta(labels={"chute/deployment-id": deployment_id}),
                 spec=V1PodSpec(
                     node_name=server.name,
+                    volumes=[
+                        V1Volume(
+                            name="code",
+                            config_map=V1ConfigMapVolumeSource(
+                                name=f"chute-code-{code_uuid}",
+                            ),
+                        )
+                    ],
                     containers=[
                         V1Container(
                             name="chute",
@@ -175,6 +211,22 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
                                     "nvidia.com/gpu": str(chute.gpu_count),
                                 },
                             ),
+                            volume_mounts=[
+                                V1VolumeMount(
+                                    name="code-volume",
+                                    mount_path=f"/app/{chute.filename}",
+                                    sub_path=chute.filename,
+                                )
+                            ],
+                            command=[
+                                "chutes",
+                                "run",
+                                chute.ref_str,
+                                "--port",
+                                "8000",
+                                "--graval-seed",
+                                str(server.graval_seed),
+                            ],
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
                                 http_get=V1HTTPGetAction(path="/_alive", port=8000),
@@ -211,46 +263,43 @@ async def deploy_chute(chute: Chute, server: Server, wait: bool = True):
         ),
     )
 
+    try:
+        created_service = k8s_core_client().create_namespaced_service(
+            namespace=settings.namespace, body=service
+        )
+        created_deployment = k8s_core_client().create_namespaced_deployment(
+            namespace=settings.namespace, body=deployment
+        )
+        deployment_port = created_service.spec.ports[0].node_port
+        async with SessionLocal() as session:
+            deployment = (
+                await session.query(
+                    select(Deployment).where(Deployment.deployment_id == deployment_id)
+                )
+            ).scalar_one_or_none()
+            if not deployment:
+                raise DeploymentFailure("Deployment disappeared mid-flight!")
+            deployment.host = server.ip_address
+            deployment.port = deployment_port
+            await session.commit()
+            await session.refresh(deployment)
 
-# TODO: deploy
-#    # Deploy!
-#    try:
-#        created_service = k8s_core_client().create_namespaced_service(
-#            namespace=settings.namespace, body=service
-#        )
-#        created_deployment = k8s_core_client().create_namespaced_deployment(
-#            namespace=settings.namespace, body=deployment
-#        )
-#
-#        # Track the verification port.
-#        expected_port = created_service.spec.ports[0].node_port
-#        async with SessionLocal() as session:
-#            result = await session.execute(
-#                update(Server)
-#                .where(Server.server_id == node_object.metadata.uid)
-#                .values(verification_port=created_service.spec.ports[0].node_port)
-#                .returning(Server.verification_port)
-#            )
-#            port = result.scalar_one_or_none()
-#            if port != expected_port:
-#                raise DeploymentFailure(
-#                    f"Unable to track verification port for newly added node: {expected_port=} actual_{port=}"
-#                )
-#            await session.commit()
-#        return created_deployment, created_service
-#    except ApiException as exc:
-#        try:
-#            k8s_core_client().delete_namespaced_service(
-#                name=f"graval-service-{node_name}",
-#                namespace=settings.namespace,
-#            )
-#        except Exception:
-#            ...
-#        try:
-#            k8s_core_client().delete_namespaced_deployment(
-#                name=f"graval-{node_name}",
-#                namespace=settings.namespace,
-#            )
-#        except Exception:
-#            ...
-#        raise DeploymentFailure(f"Failed to deploy GraVal: {str(exc)}:\n{traceback.format_exc()}")
+        return created_deployment, created_service
+    except ApiException as exc:
+        try:
+            k8s_core_client().delete_namespaced_service(
+                name=f"chute-service-{deployment_id}",
+                namespace=settings.namespace,
+            )
+        except Exception:
+            ...
+        try:
+            k8s_core_client().delete_namespaced_deployment(
+                name=f"chute-{deployment_id}",
+                namespace=settings.namespace,
+            )
+        except Exception:
+            ...
+        raise DeploymentFailure(
+            f"Failed to deploy chute {chute.chute_id} with version {chute.version}: {exc}\n{traceback.format_exc()}"
+        )
