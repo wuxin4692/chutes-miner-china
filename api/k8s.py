@@ -202,7 +202,6 @@ async def deploy_chute(chute: Chute, server: Server):
         await session.commit()
 
     # Create the deployment.
-    deployment_id = str(uuid.uuid4())
     cpu = str(server.cpu_per_gpu * chute.gpu_count)
     ram = str(server.memory_per_gpu * chute.gpu_count) + "Gi"
     code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
@@ -263,7 +262,7 @@ async def deploy_chute(chute: Chute, server: Server):
                             ),
                             volume_mounts=[
                                 V1VolumeMount(
-                                    name="code-volume",
+                                    name="code",
                                     mount_path=f"/app/{chute.filename}",
                                     sub_path=chute.filename,
                                 )
@@ -275,7 +274,7 @@ async def deploy_chute(chute: Chute, server: Server):
                                 "--port",
                                 "8000",
                                 "--graval-seed",
-                                str(server.graval_seed),
+                                str(server.seed),
                             ],
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
@@ -317,16 +316,20 @@ async def deploy_chute(chute: Chute, server: Server):
         created_service = k8s_core_client().create_namespaced_service(
             namespace=settings.namespace, body=service
         )
-        created_deployment = k8s_core_client().create_namespaced_deployment(
+        created_deployment = k8s_app_client().create_namespaced_deployment(
             namespace=settings.namespace, body=deployment
         )
         deployment_port = created_service.spec.ports[0].node_port
         async with SessionLocal() as session:
             deployment = (
-                await session.query(
-                    select(Deployment).where(Deployment.deployment_id == deployment_id)
+                (
+                    await session.execute(
+                        select(Deployment).where(Deployment.deployment_id == deployment_id)
+                    )
                 )
-            ).scalar_one_or_none()
+                .unique()
+                .scalar_one_or_none()
+            )
             if not deployment:
                 raise DeploymentFailure("Deployment disappeared mid-flight!")
             deployment.host = server.ip_address
@@ -335,7 +338,7 @@ async def deploy_chute(chute: Chute, server: Server):
             await session.commit()
             await session.refresh(deployment)
 
-        return created_deployment, created_service
+        return deployment, created_deployment, created_service
     except ApiException as exc:
         try:
             k8s_core_client().delete_namespaced_service(

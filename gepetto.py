@@ -605,7 +605,10 @@ class Gepetto:
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
                         )
                         try:
-                            await k8s.deploy_chute(chute, server)
+                            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
+                            logger.success(
+                                f"Successfully deployed {chute.chute_id=} on {server.server_id=}: {deployment.deployment_id=}"
+                            )
                         except DeploymentFailure as exc:
                             logger.error(
                                 f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
