@@ -45,7 +45,16 @@ def k8s_app_client():
     return create_kubernetes_client(cls=client.AppsV1Api)
 
 
+@lru_cache(maxsize=32)
+def validator_by_hotkey(hotkey: str):
+    valis = [validator for validator in settings.validators if validator.hotkey == hotkey]
+    if valis:
+        return valis[0]
+    return None
+
+
 class Settings(BaseSettings):
+    _validators: List[Validator] = []
     sqlalchemy: str = os.getenv(
         "POSTGRESQL", "postgresql+asyncpg://user:password@127.0.0.1:5432/chutes"
     )
@@ -69,8 +78,11 @@ class Settings(BaseSettings):
 
     @property
     def validators(self) -> List[Validator]:
+        if self._validators:
+            return self._validators
         data = json.loads(self.validators_json)
-        return [Validator(**item) for item in data["supported"]]
+        self._validators = [Validator(**item) for item in data["supported"]]
+        return self._validators
 
 
 settings = Settings()

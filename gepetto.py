@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy import select, func, case, Float, text
 from sqlalchemy.orm import selectinload
 from prometheus_api_client import PrometheusConnect
-from api.config import settings
+from api.config import settings, validator_by_hotkey
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
 from api.database import SessionLocal, engine, Base
@@ -155,13 +155,7 @@ class Gepetto:
 
         # Clean up the validator's instance record.
         if instance_id:
-            valis = [
-                validator
-                for validator in settings.validators
-                if validator.hotkey == validator_hotkey
-            ]
-            if valis:
-                vali = valis[0]
+            if (vali := validator_by_hotkey(validator_hotkey)) is not None:
                 try:
                     async with aiohttp.ClientSession() as session:
                         headers, _ = sign_request(purpose="instances")
@@ -299,16 +293,11 @@ class Gepetto:
         version = event_data["version"]
         validator_hotkey = event_data["validator"]
         logger.info(f"Received chute_created event for {chute_id=} {version=}")
-        valis = [
-            validator for validator in settings.validators if validator.hotkey == validator_hotkey
-        ]
-        if not valis:
+        if (validator := validator_by_hotkey(validator_hotkey)) is None:
             logger.warning(f"Validator not found: {validator_hotkey}")
             return
-        validator = valis[0]
 
         # Already in inventory?
-        logger.info("GOT HERE 0")
         if (chute := await self.load_chute(chute_id, version, validator_hotkey)) is not None:
             logger.info(f"Chute {chute_id=} {version=} is already tracked in inventory.")
             return
@@ -326,7 +315,6 @@ class Gepetto:
             except Exception:
                 logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
                 return
-        logger.info("GOT HERE 1")
 
         # Track in inventory.
         async with SessionLocal() as session:
@@ -345,7 +333,6 @@ class Gepetto:
             session.add(chute)
             await session.commit()
             await session.refresh(chute)
-        logger.info("GOT HERE 2")
 
         await k8s.create_code_config_map(chute)
 
@@ -353,7 +340,6 @@ class Gepetto:
         current_count = await self.count_deployments(chute.chute_id, chute.version, chute.validator)
         if not current_count:
             await self.scale_chute(chute, desired_count=desired_count, preempt=False)
-        logger.info("GOT HERE 3")
 
     async def chute_updated(self, event_data: Dict[str, Any]):
         """
@@ -767,8 +753,8 @@ class Gepetto:
             nodes = await k8s.get_kubernetes_nodes()
             node_ids = {node["server_id"] for node in nodes}
             all_server_ids = set()
-            async for row in await session.stream(select(Server)):
-                server = row[0]
+            servers = (await session.execute(select(Server))).unique().scalars()
+            for server in servers:
                 if server.server_id not in node_ids:
                     logger.warning(f"Server {server.server_id} no longer in kubernetes node list!")
                     tasks.append(

@@ -33,7 +33,7 @@ from kubernetes.client.rest import ApiException
 from typing import Tuple, Dict, List
 from api.auth import sign_request
 from api.config import settings, k8s_core_client, k8s_app_client, Validator
-from api.util import sse_message
+from api.util import sse_message, validator_by_hotkey
 from api.database import SessionLocal
 from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU
@@ -156,7 +156,7 @@ async def gather_gpu_info(
 
 
 async def deploy_graval(
-    node_object: V1Node,
+    node_object: V1Node, validator_hotkey: str
 ) -> Tuple[V1Deployment, V1Service]:
     """
     Create a deployment of the GraVal base validation service on a node.
@@ -204,9 +204,7 @@ async def deploy_graval(
                             env=[
                                 V1EnvVar(
                                     name="VALIDATOR_WHITELIST",
-                                    value=",".join(
-                                        [validator.hotkey for validator in settings.validators]
-                                    ),
+                                    value=validator_hotkey,
                                 ),
                                 V1EnvVar(
                                     name="MINER_HOTKEY_SS58",
@@ -431,7 +429,7 @@ async def check_verification_task_status(validator: Validator, task_id: str) -> 
     Check the GPU verification task status.
     """
     async with aiohttp.ClientSession(raise_for_status=True) as session:
-        headers, payload_string = sign_request(payload=None, purpose="graval")
+        headers, _ = sign_request(purpose="graval")
         async with session.get(
             f"{validator.api}/nodes/verification_status",
             params={"task_id": task_id},
@@ -498,7 +496,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         yield sse_message(
             f"server with server_id={node_object.metadata.uid} now tracked in database, provisioning graval...",
         )
-        graval_dep, graval_svc = await deploy_graval(node)
+        graval_dep, graval_svc = await deploy_graval(node, server_args.validator)
 
         # Excellent, now gather the GPU info.
         yield sse_message(
@@ -513,53 +511,53 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         yield sse_message(
             f"discovered {len(gpus)} GPUs [{model_name=}] on node, advertising node to {len(settings.validators)} validator(s)...",
         )
-        for validator in settings.validators:
+        validator = validator_by_hotkey(server_args.validator)
+        yield sse_message(
+            f"advertising node to {validator.hotkey} via {validator.api}...",
+        )
+        validator_nodes = None
+        task_id = None
+        try:
+            task_id, validator_nodes = await _advertise_nodes(validator, gpus)
+        except Exception as exc:
             yield sse_message(
-                f"advertising node to {validator.hotkey} via {validator.api}...",
+                f"failed to advertising node to {validator.hotkey} via {validator.api}: {exc}",
             )
-            validator_nodes = None
-            task_id = None
-            try:
-                task_id, validator_nodes = await _advertise_nodes(validator, gpus)
-            except Exception as exc:
-                yield sse_message(
-                    f"failed to advertising node to {validator.hotkey} via {validator.api}: {exc}",
-                )
-                raise
+            raise
+        assert (
+            len(set(node["seed"] for node in validator_nodes)) == 1
+        ), f"more than one seed produced from {validator.hotkey}!"
+        if not seed:
+            seed = validator_nodes[0]["seed"]
+        else:
             assert (
-                len(set(node["seed"] for node in validator_nodes)) == 1
-            ), f"more than one seed produced from {validator.hotkey}!"
-            if not seed:
-                seed = validator_nodes[0]["seed"]
-            else:
-                assert (
-                    seed == validator_nodes[0]["seed"]
-                ), f"validators produced differing seeds {seed} vs {validator_nodes[0]['seed']}"
-            yield sse_message(
-                f"successfully advertised node {node_object.metadata.uid} to validator {validator.hotkey}, received seed: {seed}"
+                seed == validator_nodes[0]["seed"]
+            ), f"validators produced differing seeds {seed} vs {validator_nodes[0]['seed']}"
+        yield sse_message(
+            f"successfully advertised node {node_object.metadata.uid} to validator {validator.hotkey}, received seed: {seed}"
+        )
+        async with SessionLocal() as session:
+            await session.execute(
+                update(Server)
+                .where(Server.server_id == node_object.metadata.uid)
+                .values({"seed": seed})
             )
-            async with SessionLocal() as session:
-                await session.execute(
-                    update(Server)
-                    .where(Server.server_id == node_object.metadata.uid)
-                    .values({"seed": seed})
-                )
-                await session.commit()
+            await session.commit()
 
-            # Wait for verification from this validator.
-            while (status := await check_verification_task_status(validator, task_id)) is None:
-                yield sse_message(
-                    f"waiting for validator {validator.hotkey} to finish GPU verification..."
-                )
-                await asyncio.sleep(1)
-            if status:
-                yield sse_message(
-                    f"validator {validator.hotkey} has successfully performed GPU verification"
-                )
-            else:
-                error_message = f"GPU verification failed for {validator.hotkey}, aborting!"
-                yield sse_message(error_message)
-                GraValBootstrapFailure(error_message)
+        # Wait for verification from this validator.
+        while (status := await check_verification_task_status(validator, task_id)) is None:
+            yield sse_message(
+                f"waiting for validator {validator.hotkey} to finish GPU verification..."
+            )
+            await asyncio.sleep(1)
+        if status:
+            yield sse_message(
+                f"validator {validator.hotkey} has successfully performed GPU verification"
+            )
+        else:
+            error_message = f"GPU verification failed for {validator.hotkey}, aborting!"
+            yield sse_message(error_message)
+            GraValBootstrapFailure(error_message)
 
     except Exception as exc:
         error_message = (
