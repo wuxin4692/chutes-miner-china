@@ -108,6 +108,21 @@ async def get_deployed_chutes() -> List[Dict]:
     return deployments
 
 
+async def delete_code(chute_id: str, version: str):
+    """
+    Delete the code configmap associated with a chute & version.
+    """
+    try:
+        code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute_id}::{version}"))
+        k8s_core_client().delete_namespaced_config_map(
+            name=f"chute-code-{code_uuid}", namespace=settings.namespace
+        )
+    except ApiException as exc:
+        if exc.status != 404:
+            logger.error(f"Failed to delete code reference: {exc}")
+            raise
+
+
 async def undeploy(deployment_id: str):
     """
     Delete a deployment, and associated service.
@@ -128,6 +143,30 @@ async def undeploy(deployment_id: str):
         logger.warning(f"Error deleting deployment from k8s: {exc}")
 
 
+async def create_code_config_map(chute: Chute):
+    """
+    Create a ConfigMap to store the chute code.
+    """
+    code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
+    config_map = V1ConfigMap(
+        metadata=V1ObjectMeta(
+            name=f"chute-code-{code_uuid}",
+            labels={
+                "chute/chute-id": chute.chute_id,
+                "chute/version": chute.version,
+            },
+        ),
+        data={chute.filename: chute.code},
+    )
+    try:
+        k8s_core_client().create_namespaced_config_map(
+            namespace=settings.namespace, body=config_map
+        )
+    except ApiException as e:
+        if e.status != 409:
+            raise
+
+
 async def deploy_chute(chute: Chute, server: Server):
     """
     Deploy a chute!
@@ -135,7 +174,7 @@ async def deploy_chute(chute: Chute, server: Server):
 
     # Make sure the node has capacity.
     gpus_allocated = 0
-    available_gpus = {gpu.gpu_id for gpu in server.gpus}
+    available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
     for deployment in server.deployments:
         gpus_allocated += deployment.gpu_count
         available_gpus -= {gpu.gpu_id for gpu in deployment.gpus}
@@ -161,30 +200,11 @@ async def deploy_chute(chute: Chute, server: Server):
         session.add(deployment)
         await session.commit()
 
-    # Enure the code is persisted as a configmap.
-    code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
-    config_map = V1ConfigMap(
-        metadata=V1ObjectMeta(
-            name=f"chute-code-{code_uuid}",
-            labels={
-                "chute/chute-id": chute.chute_id,
-                "chute/version": chute.version,
-            },
-        ),
-        data={chute.filename: chute.code},
-    )
-    try:
-        k8s_core_client().create_namespaced_config_map(
-            namespace=settings.namespace, body=config_map
-        )
-    except ApiException as e:
-        if e.status != 409:
-            raise
-
     # Create the deployment.
     deployment_id = str(uuid.uuid4())
     cpu = str(server.cpu_per_gpu * chute.gpu_count)
     ram = str(server.memory_per_gpu * chute.gpu_count) + "Gi"
+    code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"chute-{deployment_id}",

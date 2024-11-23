@@ -296,7 +296,7 @@ async def deploy_graval(
 
 
 async def track_server(
-    validator: str, node_object: V1Node, add_labels: Dict[str, str] = None
+    validator: str, hourly_cost: float, node_object: V1Node, add_labels: Dict[str, str] = None
 ) -> Tuple[V1Node, Server]:
     """
     Track a new kubernetes (worker/GPU) node in our inventory.
@@ -358,6 +358,7 @@ async def track_server(
             gpu_count=gpu_count,
             cpu_per_gpu=cpu_per_gpu,
             memory_per_gpu=memory_per_gpu,
+            hourly_cost=hourly_cost,
         )
         session.add(server)
         try:
@@ -464,6 +465,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
     try:
         node, server = await track_server(
             server_args.validator,
+            server_args.hourly_cost,
             node_object,
             add_labels={
                 "gpu-short-ref": server_args.gpu_short_ref,

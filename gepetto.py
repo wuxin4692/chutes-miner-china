@@ -5,10 +5,12 @@ Gepetto - coordinate all the things.
 import aiohttp
 import asyncio
 import orjson as json
+import traceback
 from datetime import datetime, timedelta
 from loguru import logger
-from typing import Dict, Any
-from sqlalchemy import select
+from typing import Dict, Any, Optional
+from sqlalchemy import select, func, case
+from sqlalchemy.orm import selectinload
 from api.config import settings
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
@@ -17,6 +19,7 @@ from api.chute.schemas import Chute
 from api.server.schemas import Server
 from api.gpu.schemas import GPU
 from api.deployment.schemas import Deployment
+from api.exceptions import DeploymentFailure
 import api.k8s as k8s
 
 
@@ -31,6 +34,7 @@ class Gepetto:
         self.remote_instances = {validator.hotkey: [] for validator in settings.validators}
         self.remote_nodes = {validator.hotkey: [] for validator in settings.validators}
         self.remote_metrics = {validator.hotkey: [] for validator in settings.validators}
+        self._scale_lock = asyncio.Lock()
         self.setup_handlers()
 
     def setup_handlers(self):
@@ -39,10 +43,17 @@ class Gepetto:
         """
         self.pubsub.on_event("gpu_added")(self.gpu_added)
         self.pubsub.on_event("server_removed")(self.server_removed)
-        self.pubsub.on_event("node_removed")(self.node_removed)
+        self.pubsub.on_event("gpu_removed")(self.gpu_removed)
         self.pubsub.on_event("chute_removed")(self.chute_removed)
         self.pubsub.on_event("chute_upserted")(self.chute_upserted)
         self.pubsub.on_event("bounty")(self.bounty)
+
+    async def run(self):
+        """
+        Main loop.
+        """
+        await self.reconsile()
+        await self.pubsub.start()
 
     @staticmethod
     async def _remote_refresh_objects(
@@ -84,6 +95,37 @@ class Gepetto:
                     f"{validator.api}/miner/{clazz}/",
                     id_field,
                 )
+
+    @staticmethod
+    async def load_chute(chute_id: str, version: str, validator: str):
+        """
+        Helper to load a chute from the local database.
+        """
+        async with SessionLocal() as session:
+            return (
+                await session.execute(
+                    select(Chute)
+                    .where(Chute.chute_id == chute_id)
+                    .where(Chute.version == version)
+                    .where(Chute.validator == validator)
+                )
+            ).scalar_one_or_none()
+
+    @staticmethod
+    async def count_deployments(chute: Chute):
+        """
+        Helper to get the number of deployments for a chute.
+        """
+        async with SessionLocal() as session:
+            return (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Deployment)
+                    .where(Deployment.chute_id == chute.chute_id)
+                    .where(Deployment.version == chute.version)
+                    .where(Deployment.validator == chute.validator)
+                )
+            ).scalar()
 
     async def undeploy(self, deployment_id: str):
         """
@@ -136,8 +178,287 @@ class Gepetto:
 
         # Purge in k8s if still there.
         await k8s.undeploy(deployment_id)
-
         logger.success(f"Removed {deployment_id=}")
+
+    async def gpu_removed(self, event_data):
+        """
+        GPU no longer exists in validator inventory for some reason.
+
+        MINERS: This shouldn't really happen, unless the validator purges it's database
+                or some such other rare event.  You may want to configure alerts or something
+                in this code block just in case.
+        """
+        gpu_id = event_data["gpu_id"]
+        logger.info(f"Received gpu_removed event for {gpu_id=}")
+        async with SessionLocal() as session:
+            gpu = (
+                await session.execute(select(GPU).where(GPU.gpu_id == gpu_id))
+            ).scalar_one_or_none()
+            if gpu:
+                if gpu.deployment:
+                    await self.undeploy(gpu.deployment_id)
+                await session.delete(gpu)
+                await session.commit()
+        logger.info(f"Finished processing gpu_removed event for {gpu_id=}")
+
+    async def server_removed(self, event_data):
+        """
+        An entire kubernetes node was removed from your inventory.
+
+        MINERS: This will happen when you remove a node intentionally, but otherwise
+                should not really happen.  Also want to monitor this situation I think.
+        """
+        server_id = event_data["server_id"]
+        logger.info(f"Received server_removed event {server_id=}")
+        async with SessionLocal() as session:
+            server = (
+                await session.execute(select(Server).where(Server.server_id == server_id))
+            ).scalar_one_or_none()
+            if server:
+                await asyncio.gather(
+                    *[self.gpu_removed({"gpu_id": gpu.gpu_id}) for gpu in server.gpus]
+                )
+                await session.delete(server)
+                await session.commit()
+        logger.info(f"Finished processing server_removed event for {server_id=}")
+
+    async def chute_removed(self, event_data):
+        """
+        A chute (or specific version of a chute) was removed from validator inventory.
+        """
+        chute_id = event_data["chute_id"]
+        version = event_data["version"]
+        validator = event_data["validator"]
+        logger.info(f"Received chute_removed event for {chute_id=} {version=}")
+        async with SessionLocal() as session:
+            chute = (
+                await session.execute(
+                    select(Chute)
+                    .where(Chute.chute_id == chute_id)
+                    .where(Chute.version == version)
+                    .where(Chute.validator == validator)
+                    .options(selectinload(Chute.deployments))
+                )
+            ).scalar_one_or_none()
+            if chute:
+                if chute.deployments:
+                    await asyncio.gather(
+                        *[
+                            self.undeploy(deployment.deployment_id)
+                            for deployment in chute.deployments
+                        ]
+                    )
+                await session.delete(chute)
+                await session.commit()
+        await k8s.delete_code(chute_id, version)
+
+    async def chute_upserted(self, event_data):
+        """
+        A chute (or new version of a chute) was added to validator inventory.
+
+        MINERS: This is a critical optimization path. A chute being created
+                does not necessarily mean inference will be requested. The
+                base mining code here *will* deploy the chute however, given
+                sufficient resources are available.
+        """
+        chute_id = event_data["chute_id"]
+        version = event_data["version"]
+        validator_hotkey = event_data["validator"]
+        logger.info(f"Received chute_removed event for {chute_id=} {version=}")
+        valis = [
+            validator for validator in settings.validators if validator.hotkey == validator_hotkey
+        ]
+        if not valis:
+            logger.warning(f"Validator not found: {validator_hotkey}")
+            return
+        validator = valis[0]
+
+        # Already in inventory?
+        if (chute := await self.load_chute(chute_id, version, validator)) is not None:
+            logger.info(f"Chute {chute_id=} {version=} is already tracked in inventory.")
+            return
+
+        # Load the chute details, preferably from the local cache.
+        chute_dict = (self.remote_chutes.get(validator) or {}).get(chute_id)
+        if not chute_dict or chute_dict["version"] != version:
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as session:
+                    headers, _ = sign_request(purpose="miner")
+                    async with session.get(
+                        f"{validator.api}/miners/chutes/{chute_id}/{version}", headers=headers
+                    ) as resp:
+                        chute_dict = await resp.json()
+            except Exception:
+                logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
+                return
+
+        # Track in inventory.
+        async with SessionLocal() as session:
+            chute = Chute(
+                chute_id=chute_id,
+                validator=validator.hotkey,
+                name=chute_dict["name"],
+                image=chute_dict["image"],
+                code=chute_dict["code"],
+                filename=chute_dict["filename"],
+                ref_str=chute_dict["ref_str"],
+                version=chute_dict["version"],
+                supported_gpus=chute_dict["supported_gpus"],
+                gpu_count=chute_dict["node_selector"]["gpu_count"],
+            )
+            session.add(chute)
+            await session.commit()
+            await session.refresh(chute)
+
+        await k8s.create_code_config_map(chute)
+
+        # This should never be anything other than 0, but just in case...
+        current_count = await self.count_deployments(chute)
+        if not current_count:
+            await self.scale_chute(chute, desired_count=1, preempt=False)
+
+    @staticmethod
+    async def optimal_scale_down_deployment(self, chute: Chute) -> Optional[Deployment]:
+        """
+        Default strategy for scaling down chutes is to find a deployment based on
+        server cost and what will be the server's GPU availability after removal.
+        """
+        gpu_counts = (
+            select(
+                Server.server_id,
+                func.count(GPU.gpu_id).label("total_gpus"),
+                func.sum(case([(GPU.deployment_id != None, 1)], else_=0)).label("used_gpus"),  # noqa
+            )
+            .join(GPU)
+            .group_by(Server.server_id)
+            .subquery()
+        )
+        query = (
+            select(
+                Deployment,
+                (Server.hourly_cost * (gpu_counts.c.used_gpus / gpu_counts.c.total_gpus)).label(
+                    "removal_score"
+                ),
+            )
+            .join(GPU)
+            .join(Server)
+            .join(gpu_counts, Server.server_id == gpu_counts.c.server_id)
+            .where(Deployment.chute_id == chute.chute_id)
+            .where(Deployment.created_at <= func.now() - timedelta(minutes=5))
+            .order_by("removal_score DESC")
+            .limit(1)
+        )
+        async with SessionLocal() as session:
+            return (await session.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    async def optimal_scale_up_server(chute: Chute) -> Optional[Server]:
+        """
+        Find the optimal server for scaling up a chute deployment.
+        """
+        total_gpus_per_server = (
+            select(Server.server_id, func.count(GPU.gpu_id).label("total_gpus"))
+            .join(GPU)
+            .where(GPU.model_short_ref.in_(chute.supported_gpus), GPU.verified.is_(True))
+            .group_by(Server.server_id)
+            .subquery()
+        )
+        used_gpus_per_server = (
+            select(Server.server_id, func.count(GPU.gpu_id).label("used_gpus"))
+            .join(GPU)
+            .join(Deployment)
+            .where(GPU.verified.is_(True))
+            .group_by(Server.server_id)
+            .subquery()
+        )
+        query = (
+            select(
+                Server,
+                total_gpus_per_server.c.total_gpus,
+                func.coalesce(used_gpus_per_server.c.used_gpus, 0).label("used_gpus"),
+                (
+                    total_gpus_per_server.c.total_gpus
+                    - func.coalesce(used_gpus_per_server.c.used_gpus, 0)
+                ).label("free_gpus"),
+            )
+            .join(GPU)
+            .join(total_gpus_per_server, Server.server_id == total_gpus_per_server.c.server_id)
+            .outerjoin(used_gpus_per_server, Server.server_id == used_gpus_per_server.c.server_id)
+            .where(
+                GPU.model_short_ref.in_(chute.supported_gpus),
+                GPU.verified.is_(True),
+                (
+                    total_gpus_per_server.c.total_gpus
+                    - func.coalesce(used_gpus_per_server.c.used_gpus, 0)
+                    >= chute.gpu_count
+                ),
+            )
+            .order_by("free_gpus ASC", Server.cost_per_hour.asc())
+            .limit(1)
+        )
+        async with SessionLocal() as session:
+            result = await session.execute(query)
+            row = result.first()
+            return row.Server if row else None
+
+    async def scale_chute(self, chute: Chute, desired_count: int, preempt: bool = False):
+        """
+        Scale up or down a chute.
+
+        MINERS: This is probably the most critical function to optimize.
+        """
+        while (current_count := await self.count_deployments(chute)) != desired_count:
+            # Scale down?
+            if current_count > desired_count:
+                # MINERS: You'll want to figure out the best strategy for selecting deployments to purge.
+                # Examples:
+                # - undeploy on whichever server already has the most GPUs free so that the server
+                #   is more capable of allocating larger chutes when they are needed
+                # - undeploy on whichever server is the most expensive, e.g. if you have a chute
+                #   running on an h100 instance but the node selector only really needs a t4
+                # - consider both when counts are equal
+                # The default selects the deployment which when removed results in highest free GPU count on that server.
+                if (deployment := await self.optimal_scale_down_deployment(chute)) is not None:
+                    await self.undeploy(deployment)
+                else:
+                    logger.error(f"Scale down impossible right now, sorry: {chute.chute_id}")
+                    return
+
+            # Scale up?
+            else:
+                # MINERS: You'll also want to figure out the best strategy for selecting servers here.
+                # Examples:
+                # - select server with the fewest GPUs available which suite the chute, like bin-packing
+                # - select the cheapest server that is capable of running the chute
+                # - select the server which already has the image and/or model warm (would be custom)
+                if (server := await self.optimal_scale_up_server(chute)) is None:
+                    logger.warning(
+                        f"No servers available to accept additional chute deployment: {chute.chute_id}"
+                    )
+                    # If no server can accept the new capacity, and pre-empty is true, we need to
+                    # figure out which deployment to remove.
+                    if preempt:
+                        if (
+                            deployment := await self.optimal_preemptable_deployment(chute)
+                        ) is not None:
+                            # No deployments are within the scale down time so we can't do anything.
+                            logger.error(
+                                f"Preempting impossible right now, sorry: {chute.chute_id}"
+                            )
+                            return
+                        logger.info(
+                            f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
+                        )
+                        await self.undeploy(deployment)
+                else:
+                    logger.info(f"Attempting to deploy {chute.chute_id=} on {server.server_id=}")
+                    try:
+                        await k8s.deploy_chute(chute, server)
+                    except DeploymentFailure as exc:
+                        logger.error(
+                            f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
+                        )
+                        return
 
     async def reconsile(self):
         """
@@ -217,7 +538,7 @@ class Gepetto:
             all_gpus = []
             for nodes in self.remote_nodes.values():
                 all_gpus += list(nodes)
-            async for row in await session.stream(select(GPU)):
+            async for row in await session.stream(select(GPU).where(GPU.verified.is_(True))):
                 gpu = row[0]
                 if gpu.gpu_id not in all_gpus:
                     logger.warning(
@@ -225,7 +546,7 @@ class Gepetto:
                     )
                     tasks.append(
                         asyncio.create_task(
-                            self.node_removed({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
+                            self.gpu_removed({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
                         )
                     )
 
@@ -282,7 +603,9 @@ class Gepetto:
                 server = row[0]
                 if server.server_id not in node_ids:
                     logger.warning(f"Server {server.server_id} no longer in kubernetes node list!")
-                    tasks.append(asyncio.create_task(self.server_removed(server.server_id)))
+                    tasks.append(
+                        asyncio.create_task(self.server_removed({"server_id": server.server_id}))
+                    )
                 all_server_ids.add(server.server_id)
 
             # XXX We won't do the opposite (remove k8s nodes that aren't tracked) because they could be in provisioning status.

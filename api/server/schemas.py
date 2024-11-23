@@ -4,7 +4,7 @@ Server (kubernetes node) tracking ORM.
 
 from pydantic import BaseModel, Field
 from typing import Literal
-from sqlalchemy import Column, String, DateTime, Integer, BigInteger
+from sqlalchemy import Column, String, DateTime, Integer, BigInteger, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,6 +14,7 @@ from api.database import Base
 class ServerArgs(BaseModel):
     name: str
     validator: str
+    hourly_cost: float
     gpu_short_ref: Literal[
         "3090",
         "4090",
@@ -48,6 +49,7 @@ class Server(Base):
     seed = Column(BigInteger)
     cpu_per_gpu = Column(Integer, nullable=False, default=1)
     memory_per_gpu = Column(Integer, nullable=False, default=1)
+    hourly_cost = Column(Float, nullable=False)
 
     gpus = relationship("GPU", back_populates="server", lazy="joined")
     deployments = relationship("Deployment", back_populates="server", lazy="joined")
