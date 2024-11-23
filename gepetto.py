@@ -43,8 +43,9 @@ class Gepetto:
         Configure the various event listeners/handlers.
         """
         self.pubsub.on_event("gpu_added")(self.gpu_added)
-        self.pubsub.on_event("server_removed")(self.server_removed)
-        self.pubsub.on_event("gpu_removed")(self.gpu_removed)
+        self.pubsub.on_event("server_deleted")(self.server_deleted)
+        self.pubsub.on_event("gpu_deleted")(self.gpu_deleted)
+        self.pubsub.on_event("instance_deleted")(self.instance_deleted)
         self.pubsub.on_event("chute_deleted")(self.chute_deleted)
         self.pubsub.on_event("chute_created")(self.chute_created)
         self.pubsub.on_event("chute_updated")(self.chute_updated)
@@ -182,7 +183,7 @@ class Gepetto:
         await k8s.undeploy(deployment_id)
         logger.success(f"Removed {deployment_id=}")
 
-    async def gpu_removed(self, event_data):
+    async def gpu_deleted(self, event_data):
         """
         GPU no longer exists in validator inventory for some reason.
 
@@ -191,7 +192,7 @@ class Gepetto:
                 in this code block just in case.
         """
         gpu_id = event_data["gpu_id"]
-        logger.info(f"Received gpu_removed event for {gpu_id=}")
+        logger.info(f"Received gpu_deleted event for {gpu_id=}")
         async with SessionLocal() as session:
             gpu = (
                 await session.execute(select(GPU).where(GPU.gpu_id == gpu_id))
@@ -201,9 +202,26 @@ class Gepetto:
                     await self.undeploy(gpu.deployment_id)
                 await session.delete(gpu)
                 await session.commit()
-        logger.info(f"Finished processing gpu_removed event for {gpu_id=}")
+        logger.info(f"Finished processing gpu_deleted event for {gpu_id=}")
 
-    async def server_removed(self, event_data):
+    async def instance_deleted(self, event_data: Dict[str, Any]):
+        """
+        An instance was removed validator side, likely meaning there were too
+        many consecutive failures in inference.
+        """
+        instance_id = event_data["instance_id"]
+        logger.info(f"Received instance_deleted event for {instance_id=}")
+        async with SessionLocal() as session:
+            deployment = (
+                await session.execute(
+                    select(Deployment).where(Deployment.instance_id == instance_id)
+                )
+            ).scalar_one_or_none()
+        if deployment:
+            await self.undeploy(deployment.deployment_id)
+        logger.info(f"Finished processing instance_deleted event for {instance_id=}")
+
+    async def server_deleted(self, event_data: Dict[str, Any]):
         """
         An entire kubernetes node was removed from your inventory.
 
@@ -211,18 +229,18 @@ class Gepetto:
                 should not really happen.  Also want to monitor this situation I think.
         """
         server_id = event_data["server_id"]
-        logger.info(f"Received server_removed event {server_id=}")
+        logger.info(f"Received server_deleted event {server_id=}")
         async with SessionLocal() as session:
             server = (
                 await session.execute(select(Server).where(Server.server_id == server_id))
             ).scalar_one_or_none()
             if server:
                 await asyncio.gather(
-                    *[self.gpu_removed({"gpu_id": gpu.gpu_id}) for gpu in server.gpus]
+                    *[self.gpu_deleted({"gpu_id": gpu.gpu_id}) for gpu in server.gpus]
                 )
                 await session.delete(server)
                 await session.commit()
-        logger.info(f"Finished processing server_removed event for {server_id=}")
+        logger.info(f"Finished processing server_deleted event for {server_id=}")
 
     async def chute_deleted(self, event_data: Dict[str, Any]):
         """
@@ -607,13 +625,17 @@ class Gepetto:
             # Clean up based on deployments/instances.
             async for row in await session.stream(select(Deployment)):
                 deployment = row[0]
-                if deployment.instance_id not in (
+                if deployment.instance_id and deployment.instance_id not in (
                     self.remote_instances.get(deployment.validator) or {}
                 ):
                     logger.warning(
                         f"Deployment: {deployment.deployment_id} (instance_id={deployment.instance_id}) on validator {deployment.validator} not found"
                     )
-                    tasks.append(asyncio.create_task(self.undeploy(deployment.deployment_id)))
+                    tasks.append(
+                        asyncio.create_task(
+                            self.instance_deleted({"instance_id": deployment.instance_id})
+                        )
+                    )
 
                 remote = (self.remote_chutes.get(deployment.validator) or {}).get(
                     deployment.chute_id
@@ -622,7 +644,6 @@ class Gepetto:
                     logger.warning(
                         f"Chute: {deployment.chute_id} version={deployment.version} on validator {deployment.validator} not found"
                     )
-                    tasks.append(asyncio.create_task(self.undeploy(deployment.deployment_id)))
                     identifier = (
                         f"{deployment.validator}:{deployment.chute_id}:{deployment.version}"
                     )
@@ -672,7 +693,7 @@ class Gepetto:
                     )
                     tasks.append(
                         asyncio.create_task(
-                            self.gpu_removed({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
+                            self.gpu_deleted({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
                         )
                     )
 
@@ -721,7 +742,7 @@ class Gepetto:
                             )
                         )
 
-            # Nodes.
+            # Kubernetes nodes (aka servers).
             nodes = await k8s.get_kubernetes_nodes()
             node_ids = {node["server_id"] for node in nodes}
             all_server_ids = set()
@@ -730,7 +751,7 @@ class Gepetto:
                 if server.server_id not in node_ids:
                     logger.warning(f"Server {server.server_id} no longer in kubernetes node list!")
                     tasks.append(
-                        asyncio.create_task(self.server_removed({"server_id": server.server_id}))
+                        asyncio.create_task(self.server_deleted({"server_id": server.server_id}))
                     )
                 all_server_ids.add(server.server_id)
 
