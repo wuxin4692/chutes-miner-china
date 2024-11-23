@@ -32,8 +32,8 @@ from sqlalchemy.exc import IntegrityError
 from kubernetes.client.rest import ApiException
 from typing import Tuple, Dict, List
 from api.auth import sign_request
-from api.config import settings, k8s_core_client, k8s_app_client, Validator
-from api.util import sse_message, validator_by_hotkey
+from api.config import settings, k8s_core_client, k8s_app_client, Validator, validator_by_hotkey
+from api.util import sse_message
 from api.database import SessionLocal
 from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU

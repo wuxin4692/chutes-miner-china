@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     miner_keypair: Keypair = Keypair.create_from_seed(os.environ["MINER_SEED"])
     validators_json: str = os.environ["VALIDATORS"]
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+    registry_proxy_port: int = int(os.getenv("REGISTRY_PROXY_PORT", "5000"))
     squid_url: str = f"http://chutes-miner-squid.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('SQUID_PORT', '3128')}"
     prometheus_url: str = f"http://chutes-miner-squid.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('SQUID_PORT', '3128')}"
 

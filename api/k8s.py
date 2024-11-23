@@ -189,6 +189,7 @@ async def deploy_chute(chute: Chute, server: Server):
     async with SessionLocal() as session:
         deployment = Deployment(
             deployment_id=deployment_id,
+            server_id=server.server_id,
             validator=server.validator,
             chute_id=chute.chute_id,
             version=chute.version,
@@ -233,7 +234,7 @@ async def deploy_chute(chute: Chute, server: Server):
                     containers=[
                         V1Container(
                             name="chute",
-                            image=chute.image,
+                            image=f"{server.validator.lower()}.registry.{settings.namespace}.svc.cluster.local:{settings.registry_proxy_port}/{chute.image}",
                             env=[
                                 V1EnvVar(
                                     name="CHUTES_EXECUTION_CONTEXT",

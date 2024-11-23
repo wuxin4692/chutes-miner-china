@@ -693,7 +693,9 @@ class Gepetto:
             all_gpus = []
             for nodes in self.remote_nodes.values():
                 all_gpus += list(nodes)
-            async for row in await session.stream(select(GPU).where(GPU.verified.is_(True))):
+            async for row in (
+                await session.stream(select(GPU).where(GPU.verified.is_(True)))
+            ).unique():
                 gpu = row[0]
                 if gpu.gpu_id not in all_gpus:
                     logger.warning(
@@ -719,7 +721,6 @@ class Gepetto:
                     logger.warning(
                         f"Chute: {chute.chute_id} version={chute.version} on validator {chute.validator} not found: {remote=}"
                     )
-                    logger.warning(f"{chute.version} vs {remote['version']}")
                     tasks.append(
                         asyncio.create_task(
                             self.chute_deleted(
