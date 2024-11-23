@@ -50,7 +50,7 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
             or validator not in allowed_signers
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away 0")
         signature_string = ":".join(
             [
                 miner,
@@ -60,7 +60,9 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
             ]
         )
         if not get_keypair(validator).verify(signature_string, bytes.fromhex(signature)):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=f"go away: {signature_string}"
+            )
 
     return _authorize
 
@@ -87,7 +89,9 @@ def get_signing_message(
         raise ValueError("Either payload_str or purpose must be provided")
 
 
-def sign_request(payload: Dict[str, Any] | str | None = None, purpose: str = None):
+def sign_request(
+    payload: Dict[str, Any] | str | None = None, purpose: str = None, management: bool = False
+):
     """
     Generate a signed request (for miner requests to validators).
     """
@@ -114,6 +118,10 @@ def sign_request(payload: Dict[str, Any] | str | None = None, purpose: str = Non
         signature_string = get_signing_message(
             settings.miner_ss58, nonce, payload_str=None, purpose=purpose
         )
+    if management:
+        signature_string = settings.miner_ss58 + ":" + signature_string
+        headers[MINER_HEADER] = headers.pop(HOTKEY_HEADER)
+        headers[VALIDATOR_HEADER] = headers[MINER_HEADER]
     logger.debug(f"Signing message: {signature_string}")
     headers[SIGNATURE_HEADER] = settings.miner_keypair.sign(signature_string.encode()).hex()
     return headers, payload_string

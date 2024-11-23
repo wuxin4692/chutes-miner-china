@@ -47,6 +47,7 @@ class Server(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     labels = Column(JSONB, nullable=False)
     seed = Column(BigInteger)
+    gpu_count = Column(Integer, nullable=False)
     cpu_per_gpu = Column(Integer, nullable=False, default=1)
     memory_per_gpu = Column(Integer, nullable=False, default=1)
     hourly_cost = Column(Float, nullable=False)

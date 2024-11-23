@@ -60,13 +60,15 @@ async def lifespan(_: FastAPI):
 
     # Start the websocket clients.
     for validator in settings.validators:
-        socket_client = SocketClient(url=validator.socket)
+        socket_client = SocketClient(url=validator.socket, validator=validator.hotkey)
         asyncio.create_task(socket_client.connect_and_run())
+
+    yield
 
 
 app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
 app.include_router(servers_router, prefix="/servers", tags=["Servers"])
-api.include_router(gpus_router, prefix="/gpus", tags=["GPUs"])
+app.include_router(gpus_router, prefix="/gpus", tags=["GPUs"])
 app.get("/ping")(lambda: {"message": "pong"})
 
 

@@ -9,13 +9,13 @@ import traceback
 from datetime import datetime, timedelta
 from loguru import logger
 from typing import Dict, Any, Optional
-from sqlalchemy import select, func, case, Float
+from sqlalchemy import select, func, case, Float, text
 from sqlalchemy.orm import selectinload
 from prometheus_api_client import PrometheusConnect
 from api.config import settings
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
-from api.database import SessionLocal
+from api.database import SessionLocal, engine, Base
 from api.chute.schemas import Chute
 from api.server.schemas import Server
 from api.gpu.schemas import GPU
@@ -55,8 +55,10 @@ class Gepetto:
         """
         Main loop.
         """
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
         await self.reconsile()
-        await self.pubsub.start()
+        # await self.pubsub.start()
 
     @staticmethod
     async def _remote_refresh_objects(
@@ -183,6 +185,18 @@ class Gepetto:
         await k8s.undeploy(deployment_id)
         logger.success(f"Removed {deployment_id=}")
 
+    async def gpu_added(self, event_data):
+        """
+        Validator has finished verifying a GPU, so it is ready for use.
+        """
+        logger.info(f"Received gpu_added event: {event_data}")
+
+    async def bounty_changed(self, event_data):
+        """
+        Bounty has changed for a chute.
+        """
+        logger.info(f"Received bounty_changed event: {event_data}")
+
     async def gpu_deleted(self, event_data):
         """
         GPU no longer exists in validator inventory for some reason.
@@ -294,12 +308,13 @@ class Gepetto:
         validator = valis[0]
 
         # Already in inventory?
-        if (chute := await self.load_chute(chute_id, version, validator)) is not None:
+        logger.info("GOT HERE 0")
+        if (chute := await self.load_chute(chute_id, version, validator_hotkey)) is not None:
             logger.info(f"Chute {chute_id=} {version=} is already tracked in inventory.")
             return
 
         # Load the chute details, preferably from the local cache.
-        chute_dict = (self.remote_chutes.get(validator) or {}).get(chute_id)
+        chute_dict = (self.remote_chutes.get(validator_hotkey) or {}).get(chute_id)
         if not chute_dict or chute_dict["version"] != version:
             try:
                 async with aiohttp.ClientSession(raise_for_status=True) as session:
@@ -311,6 +326,7 @@ class Gepetto:
             except Exception:
                 logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
                 return
+        logger.info("GOT HERE 1")
 
         # Track in inventory.
         async with SessionLocal() as session:
@@ -329,6 +345,7 @@ class Gepetto:
             session.add(chute)
             await session.commit()
             await session.refresh(chute)
+        logger.info("GOT HERE 2")
 
         await k8s.create_code_config_map(chute)
 
@@ -336,6 +353,7 @@ class Gepetto:
         current_count = await self.count_deployments(chute.chute_id, chute.version, chute.validator)
         if not current_count:
             await self.scale_chute(chute, desired_count=desired_count, preempt=False)
+        logger.info("GOT HERE 3")
 
     async def chute_updated(self, event_data: Dict[str, Any]):
         """
@@ -396,16 +414,17 @@ class Gepetto:
         """
         total_gpus_per_server = (
             select(Server.server_id, func.count(GPU.gpu_id).label("total_gpus"))
-            .join(GPU)
+            .select_from(Server)
+            .join(GPU, Server.server_id == GPU.server_id)
             .where(GPU.model_short_ref.in_(chute.supported_gpus), GPU.verified.is_(True))
             .group_by(Server.server_id)
             .subquery()
         )
         used_gpus_per_server = (
             select(Server.server_id, func.count(GPU.gpu_id).label("used_gpus"))
-            .join(GPU)
-            .join(Deployment)
-            .where(GPU.verified.is_(True))
+            .select_from(Server)
+            .join(GPU, Server.server_id == GPU.server_id)
+            .where(GPU.verified.is_(True), GPU.deployment_id.isnot(None))
             .group_by(Server.server_id)
             .subquery()
         )
@@ -419,9 +438,10 @@ class Gepetto:
                     - func.coalesce(used_gpus_per_server.c.used_gpus, 0)
                 ).label("free_gpus"),
             )
-            .join(GPU)
+            .select_from(Server)
             .join(total_gpus_per_server, Server.server_id == total_gpus_per_server.c.server_id)
             .outerjoin(used_gpus_per_server, Server.server_id == used_gpus_per_server.c.server_id)
+            .join(GPU, Server.server_id == GPU.server_id)
             .where(
                 GPU.model_short_ref.in_(chute.supported_gpus),
                 GPU.verified.is_(True),
@@ -431,7 +451,7 @@ class Gepetto:
                     >= chute.gpu_count
                 ),
             )
-            .order_by("free_gpus ASC", Server.cost_per_hour.asc())
+            .order_by(text("free_gpus ASC"), Server.hourly_cost.asc())
             .limit(1)
         )
         async with SessionLocal() as session:
@@ -592,6 +612,8 @@ class Gepetto:
                                 f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
                             )
                             await self.undeploy(deployment)
+                        else:
+                            return
                     else:
                         logger.info(
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
@@ -619,7 +641,7 @@ class Gepetto:
         chutes_to_remove = set()
         all_chutes = set()
         all_deployments = set()
-        k8s_chutes = k8s.get_deployed_chutes()
+        k8s_chutes = await k8s.get_deployed_chutes()
         k8s_chute_ids = {c["deployment_id"] for c in k8s_chutes}
         async with SessionLocal() as session:
             # Clean up based on deployments/instances.
@@ -702,17 +724,16 @@ class Gepetto:
                 chute = row[0]
                 identifier = f"{chute.validator}:{chute.chute_id}:{chute.version}"
                 all_chutes.add(identifier)
-                remote = (self.remote_chutes.get(deployment.validator) or {}).get(
-                    deployment.chute_id
-                )
+                remote = (self.remote_chutes.get(chute.validator) or {}).get(chute.chute_id)
                 if (
-                    chute.chute_id not in remote
+                    not remote
                     or remote["version"] != chute.version
                     and identifier not in chutes_to_remove
                 ):
                     logger.warning(
-                        f"Chute: {chute.chute_id} version={chute.version} on validator {chute.validator} not found"
+                        f"Chute: {chute.chute_id} version={chute.version} on validator {chute.validator} not found: {remote=}"
                     )
+                    logger.warning(f"{chute.version} vs {remote['version']}")
                     tasks.append(
                         asyncio.create_task(
                             self.chute_deleted(
@@ -728,7 +749,7 @@ class Gepetto:
 
             # New chutes.
             for validator, chutes in self.remote_chutes.items():
-                for chute_id, config in chutes:
+                for chute_id, config in chutes.items():
                     if f"{validator}:{chute_id}:{config['version']}" not in all_chutes:
                         tasks.append(
                             asyncio.create_task(
@@ -761,3 +782,12 @@ class Gepetto:
                     logger.warning(f"Server/node {node_id} not tracked in inventory, ignoring...")
 
             await asyncio.gather(*tasks)
+
+
+async def main():
+    gepetto = Gepetto()
+    await gepetto.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -7,7 +7,7 @@ from starlette.responses import StreamingResponse
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db_session
-from api.config import settings
+from api.config import k8s_core_client
 from api.auth import authorize
 from api.server.schemas import Server, ServerArgs
 from api.server.util import bootstrap_server
@@ -36,7 +36,7 @@ async def create_server(
     Add a new server/kubernetes node to our inventory.  This is a very
     slow/long-running response via SSE, since it needs to do a lot of things.
     """
-    node = settings.core_k8s_client.read_node(name=server_args.name)
+    node = k8s_core_client().read_node(name=server_args.name)
     if not node:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

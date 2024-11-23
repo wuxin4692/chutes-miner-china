@@ -13,7 +13,6 @@ from sqlalchemy import (
     Integer,
 )
 from api.database import Base
-from api.associations import deployment_gpus
 
 
 class Deployment(Base):
@@ -25,14 +24,13 @@ class Deployment(Base):
     host = Column(String)
     port = Column(Integer)
     chute_id = Column(String, ForeignKey("chutes.chute_id", ondelete="CASCADE"), nullable=False)
+    server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     version = Column(String, nullable=False)
     active = Column(Boolean, default=False)
     verified = Column(Boolean, default=False)
     stub = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    gpus = relationship(
-        "GPU", secondary=deployment_gpus, back_populates="deployment", lazy="joined"
-    )
-    chute = relationship("Chute", back_populates="instances", lazy="joined")
+    gpus = relationship("GPU", back_populates="deployment", cascade="all, delete-orphan")
+    chute = relationship("Chute", back_populates="deployments", lazy="joined")
     server = relationship("Server", back_populates="deployments", lazy="joined")

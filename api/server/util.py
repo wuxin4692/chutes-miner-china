@@ -10,6 +10,7 @@ import asyncio
 import traceback
 import api.constants as cst
 from loguru import logger
+from kubernetes import watch
 from kubernetes.client import (
     V1Node,
     V1Deployment,
@@ -25,16 +26,15 @@ from kubernetes.client import (
     V1Probe,
     V1HTTPGetAction,
     V1EnvVar,
-    Watch,
 )
-from sqlalchemy import update
+from sqlalchemy import update, select
 from sqlalchemy.exc import IntegrityError
 from kubernetes.client.rest import ApiException
 from typing import Tuple, Dict, List
 from api.auth import sign_request
-from api.config import settings, Validator
+from api.config import settings, k8s_core_client, k8s_app_client, Validator
 from api.util import sse_message
-from api.database import get_db_session
+from api.database import SessionLocal
 from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU
 from api.exceptions import (
@@ -89,12 +89,11 @@ async def gather_gpu_info(
         raise GraValBootstrapFailure("Node does not have required gpu-short-ref label!")
 
     # Wait for the bootstrap deployment to be ready.
-    watch = Watch()
     start_time = time.time()
     deployment_ready = False
     try:
-        async for event in watch.stream(
-            settings.k8s_core_client().list_namespaced_deployment,
+        for event in watch.Watch().stream(
+            k8s_app_client().list_namespaced_deployment,
             namespace=namespace,
             field_selector=f"metadata.name={deployment_name}",
             timeout_seconds=settings.graval_bootstrap_timeout,
@@ -136,7 +135,7 @@ async def gather_gpu_info(
 
     # Store inventory.
     gpus = []
-    async with get_db_session() as session:
+    async with SessionLocal() as session:
         for device_id in range(len(devices)):
             device_info = devices[device_id]
             gpu = GPU(
@@ -165,12 +164,13 @@ async def deploy_graval(
     node_labels = node_object.metadata.labels or {}
 
     # Double check that we don't already have chute deployments.
-    existing_deployments = settings.k8s_core_client().list_namespaced_deployment(
+    existing_deployments = k8s_app_client().list_namespaced_deployment(
         namespace=settings.namespace,
         label_selector="chute/chute=true,app=graval-bootstrap",
-        field_selector=f"spec.template.spec.nodeName={node_name}",
     )
-    if existing_deployments.items:
+    if any(
+        [dep for dep in existing_deployments.items if dep.spec.template.spec.node_name == node_name]
+    ):
         raise NonEmptyServer(
             f"Kubnernetes node {node_name} already has one or more chute and/or graval deployments."
         )
@@ -254,16 +254,16 @@ async def deploy_graval(
 
     # Deploy!
     try:
-        created_service = settings.k8s_core_client().create_namespaced_service(
+        created_service = k8s_core_client().create_namespaced_service(
             namespace=settings.namespace, body=service
         )
-        created_deployment = settings.k8s_core_client().create_namespaced_deployment(
+        created_deployment = k8s_app_client().create_namespaced_deployment(
             namespace=settings.namespace, body=deployment
         )
 
         # Track the verification port.
         expected_port = created_service.spec.ports[0].node_port
-        async with get_db_session() as session:
+        async with SessionLocal() as session:
             result = await session.execute(
                 update(Server)
                 .where(Server.server_id == node_object.metadata.uid)
@@ -279,14 +279,14 @@ async def deploy_graval(
         return created_deployment, created_service
     except ApiException as exc:
         try:
-            settings.k8s_core_client().delete_namespaced_service(
+            k8s_core_client().delete_namespaced_service(
                 name=f"graval-service-{node_name}",
                 namespace=settings.namespace,
             )
         except Exception:
             ...
         try:
-            settings.k8s_core_client().delete_namespaced_deployment(
+            k8s_core_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}",
                 namespace=settings.namespace,
             )
@@ -313,9 +313,7 @@ async def track_server(
     if labels_to_add:
         current_labels.update(labels_to_add)
         body = {"metadata": {"labels": current_labels}}
-        node_object = settings.k8s_core_client().patch_node(
-            name=node_object.metadata.name, body=body
-        )
+        node_object = k8s_core_client().patch_node(name=node_object.metadata.name, body=body)
     labels = current_labels
 
     # Extract node information from kubernetes meta.
@@ -334,7 +332,7 @@ async def track_server(
         raise ValueError(f"Node is not yet ready [{status=}]")
 
     # Calculate CPU/RAM per GPU for allocation purposes.
-    gpu_count = int(node_object.labels["nvidia.com/gpu.count"])
+    gpu_count = int(node_object.metadata.labels["nvidia.com/gpu.count"])
     cpu_per_gpu = math.floor(int(node_object.status.capacity["cpu"]) / gpu_count) - 1 or 1
     memory_per_gpu = (
         int(
@@ -347,7 +345,7 @@ async def track_server(
     )
 
     # Track the server in our inventory.
-    async with get_db_session() as session:
+    async with SessionLocal() as session:
         server = Server(
             server_id=node_object.metadata.uid,
             validator=validator,
@@ -438,21 +436,21 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         node_name = node_object.metadata.name
         node_uid = node_object.metadata.uid
         try:
-            settings.k8s_core_client().delete_namespaced_service(
+            k8s_core_client().delete_namespaced_service(
                 name=f"graval-service-{node_name}", namespace=settings.namespace
             )
         except Exception:
             ...
         try:
-            settings.k8s_core_client().delete_namespaced_deployment(
+            k8s_core_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}", namespace=settings.namespace
             )
         except Exception:
             ...
         if delete_node:
-            async with get_db_session() as session:
+            async with SessionLocal() as session:
                 node = (
-                    await session.query(Server).where(Server.server_id == node_uid)
+                    await session.execute(select(Server).where(Server.server_id == node_uid))
                 ).scalar_one_or_none()
                 if node:
                     session.delete(node)
@@ -518,7 +516,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
             yield sse_message(
                 f"successfully advertised node {node_object.metadata.uid} to validator {validator.hotkey}, received seed: {seed}"
             )
-            async with get_db_session() as session:
+            async with SessionLocal() as session:
                 await session.execute(
                     update(Server)
                     .where(Server.server_id == node_object.metadata.uid)
@@ -553,7 +551,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         await _cleanup(delete_node=False)
 
     # Astonishing, everything worked.
-    async with get_db_session() as session:
+    async with SessionLocal() as session:
         await session.execute(
             update(GPU).where(GPU.server_id == node_object.metadata.uid).values({"verified": True})
         )

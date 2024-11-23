@@ -67,6 +67,7 @@ class SocketClient:
             if reason not in ("chute_deleted", "chute_updated", "chute_created", "bounty_change"):
                 logger.warning(f"Ignoring invalid broadcast: {data}")
                 return
+            data["data"].update({"validator": self.validator})
             await settings.redis_client.publish(
                 "miner_events",
                 json.dumps(
