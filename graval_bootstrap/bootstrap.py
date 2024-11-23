@@ -45,7 +45,6 @@ def main():
     miner = Miner()
     # Dummy init.
     gpu_count = miner.initialize(0)
-    miner._initialized = False
     miner._init_seed = None
     app = FastAPI(
         title="GraVal bootstrap",
@@ -107,7 +106,7 @@ def main():
         body = json.loads(request_body.decode())
         cipher = Cipher(**body)
         async with gpu_lock:
-            if not miner._initialized or miner._init_seed != cipher.seed:
+            if not miner._init_seed != cipher.seed:
                 miner.initialize(cipher.seed)
                 miner._init_seed = cipher.seed
             return {

@@ -24,12 +24,30 @@ ADD --chown=chutes porter /app
 WORKDIR /app
 RUN poetry install
 ENV PYTHONPATH=/app
-ENTRYPOINT ["poetry", "run", "python", "porter.py", "--real-host", "$REAL_AXON_HOST", "--real-port", "$REAL_AXON_PORT", "--validator-whitelist", "$VALIDATOR_WHITELIST", "--hotkey", "$MINER_HOTKEY_SS58"]
+ENTRYPOINT poetry run python porter.py --real-host $REAL_AXON_HOST --real-port $REAL_AXON_PORT --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58
 
 # GraVal bootstrap.
-FROM base AS bootstrap
-ADD --chown=chutes porter /app
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS bootstrap
+RUN apt-get -y update
+RUN apt-get -y install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev libexpat1-dev lzma liblzma-dev libpq-dev curl
+WORKDIR /usr/src
+RUN wget https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tgz
+RUN tar -xzf Python-3.12.7.tgz
+WORKDIR /usr/src/Python-3.12.7
+RUN ./configure --enable-optimizations --enable-shared --with-system-expat --with-ensurepip=install --prefix=/opt/python
+RUN make -j
+RUN make altinstall
+RUN ln -s /opt/python/bin/pip3.12 /opt/python/bin/pip
+RUN ln -s /opt/python/bin/python3.12 /opt/python/bin/python
+RUN echo /opt/python/lib >> /etc/ld.so.conf && ldconfig
+RUN rm -rf /usr/src/Python*
+RUN useradd chutes -s /bin/bash -d /home/chutes && mkdir -p /home/chutes && chown chutes:chutes /home/chutes
+RUN mkdir -p /app && chown chutes:chutes /app
+USER chutes
+ENV PATH=/opt/python/bin:$PATH
+RUN curl -sSL https://install.python-poetry.org | python -
+ENV PATH=$PATH:/home/chutes/.local/bin
+ADD --chown=chutes graval_bootstrap /app
 WORKDIR /app
 RUN poetry install
-ENV PYTHONPATH=/app
-ENTRYPOINT ["poetry", "run", "python", "bootstrap.py", "--validator-whitelist", "$VALIDATOR_WHITELIST", "--hotkey", "$MINER_HOTKEY_SS58"]
+ENTRYPOINT poetry run python bootstrap.py --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58

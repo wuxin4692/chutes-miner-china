@@ -103,7 +103,7 @@ def sign_request(
     signature_string = None
     payload_string = None
     if payload is not None:
-        if isinstance(payload, dict):
+        if isinstance(payload, (list, dict)):
             headers["Content-Type"] = "application/json"
             payload_string = json.dumps(payload)
         else:

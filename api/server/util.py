@@ -59,15 +59,16 @@ async def _fetch_devices(url):
     """
     nonce = str(int(time.time()))
     headers = {
-        cst.HOTKEY_HEADER: settings.miner_ss58,
+        cst.MINER_HEADER: settings.miner_ss58,
         cst.VALIDATOR_HEADER: settings.miner_ss58,
         cst.NONCE_HEADER: nonce,
     }
     headers[cst.SIGNATURE_HEADER] = settings.miner_keypair.sign(
         ":".join([settings.miner_ss58, settings.miner_ss58, nonce, "graval"])
     ).hex()
+    logger.debug(f"Authenticating: {headers}")
     async with aiohttp.ClientSession(raise_for_status=True) as session:
-        async with session.get(url, timeout=5) as response:
+        async with session.get(url, headers=headers, timeout=5) as response:
             return (await response.json())["devices"]
 
 
@@ -125,7 +126,7 @@ async def gather_gpu_info(
     # Query the GPU information.
     devices = None
     try:
-        devices = await _fetch_devices("http://{node_ip}:{node_port}/devices")
+        devices = await _fetch_devices(f"http://{node_ip}:{node_port}/devices")
         assert devices
         assert len(devices) == expected_gpu_count
     except Exception as exc:
@@ -144,7 +145,7 @@ async def gather_gpu_info(
                 gpu_id=device_info["uuid"],
                 device_info=device_info,
                 model_short_ref=gpu_short_ref,
-                validated=False,
+                verified=False,
             )
             session.add(gpu)
             gpus.append(gpu)
@@ -199,6 +200,7 @@ async def deploy_graval(
                         V1Container(
                             name="graval",
                             image=settings.graval_bootstrap_image,
+                            image_pull_policy="Always",
                             env=[
                                 V1EnvVar(
                                     name="VALIDATOR_WHITELIST",
@@ -226,7 +228,7 @@ async def deploy_graval(
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
                                 http_get=V1HTTPGetAction(path="/ping", port=8000),
-                                initial_delay_seconds=45,
+                                initial_delay_seconds=15,
                                 period_seconds=10,
                                 timeout_seconds=1,
                                 success_threshold=1,
@@ -384,11 +386,28 @@ async def _advertise_nodes(validator: Validator, gpus: List[GPU]):
     """
     Post GPU information to one validator, with retries.
     """
-    async with aiohttp.ClientSession(raise_for_status=True) as session:
-        headers, payload_string = sign_request(payload=[gpu.dict() for gpu in gpus])
+    async with aiohttp.ClientSession() as session:
+        device_infos = [
+            {
+                **gpus[idx].device_info,
+                **dict(
+                    device_index=idx,
+                    gpu_identifier=gpus[idx].model_short_ref,
+                    verification_host=gpus[idx].server.ip_address,
+                    verification_port=gpus[idx].server.verification_port,
+                ),
+            }
+            for idx in range(len(gpus))
+        ]
+        import json
+
+        logger.info(f"POSTING:\n{json.dumps(device_infos, indent=2)}")
+        headers, payload_string = sign_request(payload={"nodes": device_infos})
         async with session.post(
             f"{validator.api}/nodes/", data=payload_string, headers=headers
         ) as response:
+            logger.info(f"RESPONSE: {await response.text()}")
+            assert response.status == 202
             data = await response.json()
             nodes = data.get("nodes")
             task_id = data.get("task_id")
@@ -432,7 +451,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
     """
     started_at = time.time()
 
-    async def _cleanup(delete_node=True):
+    async def _cleanup(delete_node: bool = True):
         node_name = node_object.metadata.name
         node_uid = node_object.metadata.uid
         try:
@@ -442,18 +461,21 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         except Exception:
             ...
         try:
-            k8s_core_client().delete_namespaced_deployment(
+            k8s_app_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}", namespace=settings.namespace
             )
         except Exception:
             ...
-        if delete_node:
+        if delete_node and False:
+            logger.info(f"Purging failed server: {node_name=} {node_uid=}")
             async with SessionLocal() as session:
                 node = (
-                    await session.execute(select(Server).where(Server.server_id == node_uid))
-                ).scalar_one_or_none()
+                    (await session.execute(select(Server).where(Server.server_id == node_uid)))
+                    .unique()
+                    .scalar_one_or_none()
+                )
                 if node:
-                    session.delete(node)
+                    await session.delete(node)
                 await session.commit()
 
     yield sse_message(
@@ -487,7 +509,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         )
 
         # Beautiful, tell the validators about it.
-        model_name = gpus[0]["name"]
+        model_name = gpus[0].device_info["name"]
         yield sse_message(
             f"discovered {len(gpus)} GPUs [{model_name=}] on node, advertising node to {len(settings.validators)} validator(s)...",
         )

@@ -495,12 +495,12 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.5)", "htt
 
 [[package]]
 name = "graval"
-version = "0.0.3"
+version = "0.0.5"
 description = "GraVal - graphics (card) validation framework"
 optional = false
 python-versions = "*"
 files = [
-    {file = "graval-0.0.3-py3-none-any.whl", hash = "sha256:702ad1ebd4dd4d31f28af0334433169b75830e323008449827228149f3909699"},
+    {file = "graval-0.0.5-py3-none-any.whl", hash = "sha256:d45f8821b342ad8ec5a2a5b7fab6c39609077586ceef8fbcb6054067c958c8d5"},
 ]
 
 [package.dependencies]
@@ -1341,4 +1341,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "65223ac96f1164c29618dd8d54b770ea78dccdcba51e9f72be35e8ad1c56f983"
+content-hash = "1bcf258db4df8e8cfc884534d341da943c29fd4b17463579d3bcc1b008301f58"

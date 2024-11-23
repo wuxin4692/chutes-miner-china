@@ -52,5 +52,7 @@ class Server(Base):
     memory_per_gpu = Column(Integer, nullable=False, default=1)
     hourly_cost = Column(Float, nullable=False)
 
-    gpus = relationship("GPU", back_populates="server", lazy="joined")
-    deployments = relationship("Deployment", back_populates="server", lazy="joined")
+    gpus = relationship("GPU", back_populates="server", lazy="joined", cascade="all, delete-orphan")
+    deployments = relationship(
+        "Deployment", back_populates="server", lazy="joined", cascade="all, delete-orphan"
+    )
