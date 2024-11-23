@@ -9,8 +9,10 @@ ENV PATH=$PATH:/home/chutes/.local/bin
 
 # Miner/API
 FROM base AS api
+USER root
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl /usr/local/bin/ && chmod 755 /usr/local/bin/kubectl
 RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 && chmod +x /usr/local/bin/dbmate
+USER chutes
 ADD --chown=chutes pyproject.toml poetry.lock /app/
 ADD --chown=chutes api /app/api
 WORKDIR /app
