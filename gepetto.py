@@ -45,9 +45,10 @@ class Gepetto:
         self.pubsub.on_event("gpu_added")(self.gpu_added)
         self.pubsub.on_event("server_removed")(self.server_removed)
         self.pubsub.on_event("gpu_removed")(self.gpu_removed)
-        self.pubsub.on_event("chute_removed")(self.chute_removed)
-        self.pubsub.on_event("chute_upserted")(self.chute_upserted)
-        self.pubsub.on_event("bounty")(self.bounty)
+        self.pubsub.on_event("chute_deleted")(self.chute_deleted)
+        self.pubsub.on_event("chute_created")(self.chute_created)
+        self.pubsub.on_event("chute_updated")(self.chute_updated)
+        self.pubsub.on_event("bounty_changed")(self.bounty_changed)
 
     async def run(self):
         """
@@ -113,7 +114,7 @@ class Gepetto:
             ).scalar_one_or_none()
 
     @staticmethod
-    async def count_deployments(chute: Chute):
+    async def count_deployments(chute_id: str, version: str, validator: str):
         """
         Helper to get the number of deployments for a chute.
         """
@@ -122,9 +123,9 @@ class Gepetto:
                 await session.execute(
                     select(func.count())
                     .select_from(Deployment)
-                    .where(Deployment.chute_id == chute.chute_id)
-                    .where(Deployment.version == chute.version)
-                    .where(Deployment.validator == chute.validator)
+                    .where(Deployment.chute_id == chute_id)
+                    .where(Deployment.version == version)
+                    .where(Deployment.validator == validator)
                 )
             ).scalar()
 
@@ -223,14 +224,14 @@ class Gepetto:
                 await session.commit()
         logger.info(f"Finished processing server_removed event for {server_id=}")
 
-    async def chute_removed(self, event_data):
+    async def chute_deleted(self, event_data: Dict[str, Any]):
         """
         A chute (or specific version of a chute) was removed from validator inventory.
         """
         chute_id = event_data["chute_id"]
         version = event_data["version"]
         validator = event_data["validator"]
-        logger.info(f"Received chute_removed event for {chute_id=} {version=}")
+        logger.info(f"Received chute_deleted event for {chute_id=} {version=}")
         async with SessionLocal() as session:
             chute = (
                 await session.execute(
@@ -253,9 +254,9 @@ class Gepetto:
                 await session.commit()
         await k8s.delete_code(chute_id, version)
 
-    async def chute_upserted(self, event_data):
+    async def chute_created(self, event_data: Dict[str, Any], desired_count: int = 1):
         """
-        A chute (or new version of a chute) was added to validator inventory.
+        A brand new chute was added to validator inventory.
 
         MINERS: This is a critical optimization path. A chute being created
                 does not necessarily mean inference will be requested. The
@@ -265,7 +266,7 @@ class Gepetto:
         chute_id = event_data["chute_id"]
         version = event_data["version"]
         validator_hotkey = event_data["validator"]
-        logger.info(f"Received chute_removed event for {chute_id=} {version=}")
+        logger.info(f"Received chute_created event for {chute_id=} {version=}")
         valis = [
             validator for validator in settings.validators if validator.hotkey == validator_hotkey
         ]
@@ -314,9 +315,27 @@ class Gepetto:
         await k8s.create_code_config_map(chute)
 
         # This should never be anything other than 0, but just in case...
-        current_count = await self.count_deployments(chute)
+        current_count = await self.count_deployments(chute.chute_id, chute.version, chute.validator)
         if not current_count:
-            await self.scale_chute(chute, desired_count=1, preempt=False)
+            await self.scale_chute(chute, desired_count=desired_count, preempt=False)
+
+    async def chute_updated(self, event_data: Dict[str, Any]):
+        """
+        A new version of a chute was published, meaning we need to replace the existing
+        deployments with the updated versions.
+        """
+        chute_id = event_data["chute_id"]
+        version = event_data["version"]
+        old_version = event_data.get("old_version")
+        validator_hotkey = event_data["validator"]
+        logger.info(f"Received chute_updated event for {chute_id=} {version=}")
+        current_count = 0
+        if old_version:
+            current_count = await self.count_deployments(chute_id, version, validator_hotkey)
+            await self.chute_deleted(
+                {"chute_id": chute_id, "version": old_version, "validator": validator_hotkey}
+            )
+        await self.chute_created(event_data, desired_count=current_count or 1)
 
     @staticmethod
     async def optimal_scale_down_deployment(self, chute: Chute) -> Optional[Deployment]:
@@ -507,58 +526,65 @@ class Gepetto:
 
         MINERS: This is probably the most critical function to optimize.
         """
-        while (current_count := await self.count_deployments(chute)) != desired_count:
-            # Scale down?
-            if current_count > desired_count:
-                # MINERS: You'll want to figure out the best strategy for selecting deployments to purge.
-                # Examples:
-                # - undeploy on whichever server already has the most GPUs free so that the server
-                #   is more capable of allocating larger chutes when they are needed
-                # - undeploy on whichever server is the most expensive, e.g. if you have a chute
-                #   running on an h100 instance but the node selector only really needs a t4
-                # - consider both when counts are equal
-                # The default selects the deployment which when removed results in highest free GPU count on that server.
-                if (deployment := await self.optimal_scale_down_deployment(chute)) is not None:
-                    await self.undeploy(deployment)
-                else:
-                    logger.error(f"Scale down impossible right now, sorry: {chute.chute_id}")
-                    return
+        async with self._scale_lock:
+            while (
+                current_count := await self.count_deployments(
+                    chute.chute_id, chute.version, chute.validator
+                )
+            ) != desired_count:
+                # Scale down?
+                if current_count > desired_count:
+                    # MINERS: You'll want to figure out the best strategy for selecting deployments to purge.
+                    # Examples:
+                    # - undeploy on whichever server already has the most GPUs free so that the server
+                    #   is more capable of allocating larger chutes when they are needed
+                    # - undeploy on whichever server is the most expensive, e.g. if you have a chute
+                    #   running on an h100 instance but the node selector only really needs a t4
+                    # - consider both when counts are equal
+                    # The default selects the deployment which when removed results in highest free GPU count on that server.
+                    if (deployment := await self.optimal_scale_down_deployment(chute)) is not None:
+                        await self.undeploy(deployment)
+                    else:
+                        logger.error(f"Scale down impossible right now, sorry: {chute.chute_id}")
+                        return
 
-            # Scale up?
-            else:
-                # MINERS: You'll also want to figure out the best strategy for selecting servers here.
-                # Examples:
-                # - select server with the fewest GPUs available which suite the chute, like bin-packing
-                # - select the cheapest server that is capable of running the chute
-                # - select the server which already has the image and/or model warm (would be custom)
-                if (server := await self.optimal_scale_up_server(chute)) is None:
-                    logger.warning(
-                        f"No servers available to accept additional chute deployment: {chute.chute_id}"
-                    )
-                    # If no server can accept the new capacity, and pre-empty is true, we need to
-                    # figure out which deployment to remove.
-                    if preempt:
-                        if (
-                            deployment := await self.optimal_preemptable_deployment(chute)
-                        ) is not None:
-                            # No deployments are within the scale down time so we can't do anything.
+                # Scale up?
+                else:
+                    # MINERS: You'll also want to figure out the best strategy for selecting servers here.
+                    # Examples:
+                    # - select server with the fewest GPUs available which suite the chute, like bin-packing
+                    # - select the cheapest server that is capable of running the chute
+                    # - select the server which already has the image and/or model warm (would be custom)
+                    if (server := await self.optimal_scale_up_server(chute)) is None:
+                        logger.warning(
+                            f"No servers available to accept additional chute deployment: {chute.chute_id}"
+                        )
+                        # If no server can accept the new capacity, and pre-empty is true, we need to
+                        # figure out which deployment to remove.
+                        if preempt:
+                            if (
+                                deployment := await self.optimal_preemptable_deployment(chute)
+                            ) is not None:
+                                # No deployments are within the scale down time so we can't do anything.
+                                logger.error(
+                                    f"Preempting impossible right now, sorry: {chute.chute_id}"
+                                )
+                                return
+                            logger.info(
+                                f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
+                            )
+                            await self.undeploy(deployment)
+                    else:
+                        logger.info(
+                            f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
+                        )
+                        try:
+                            await k8s.deploy_chute(chute, server)
+                        except DeploymentFailure as exc:
                             logger.error(
-                                f"Preempting impossible right now, sorry: {chute.chute_id}"
+                                f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
                             )
                             return
-                        logger.info(
-                            f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
-                        )
-                        await self.undeploy(deployment)
-                else:
-                    logger.info(f"Attempting to deploy {chute.chute_id=} on {server.server_id=}")
-                    try:
-                        await k8s.deploy_chute(chute, server)
-                    except DeploymentFailure as exc:
-                        logger.error(
-                            f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
-                        )
-                        return
 
     async def reconsile(self):
         """
@@ -604,7 +630,7 @@ class Gepetto:
                         chutes_to_remove.add(identifier)
                         tasks.append(
                             asyncio.create_task(
-                                self.chute_removed(
+                                self.chute_deleted(
                                     {
                                         "chute_id": deployment.chute_id,
                                         "version": deployment.version,
@@ -668,7 +694,7 @@ class Gepetto:
                     )
                     tasks.append(
                         asyncio.create_task(
-                            self.chute_removed(
+                            self.chute_deleted(
                                 {
                                     "chute_id": chute.chute_id,
                                     "version": chute.version,
@@ -685,7 +711,7 @@ class Gepetto:
                     if f"{validator}:{chute_id}:{config['version']}" not in all_chutes:
                         tasks.append(
                             asyncio.create_task(
-                                self.chute_upserted(
+                                self.chute_created(
                                     {
                                         "chute_id": chute_id,
                                         "version": config["version"],

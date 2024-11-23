@@ -11,11 +11,12 @@ from api.config import settings
 
 
 class SocketClient:
-    def __init__(self, url: str):
+    def __init__(self, url: str, validator: str):
         """
         Constructor.
         """
         self.url = url
+        self.validator = validator
         self.sio = AsyncClient()
         self.setup_handlers()
 
@@ -62,12 +63,16 @@ class SocketClient:
             where the magic happens.
             """
             logger.info(f"Received broadcast to miners: {data}")
+            reason = data.get("reason")
+            if reason not in ("chute_deleted", "chute_updated", "chute_created", "bounty_change"):
+                logger.warning(f"Ignoring invalid broadcast: {data}")
+                return
             await settings.redis_client.publish(
                 "miner_events",
                 json.dumps(
                     {
-                        "event_type": "miner_broadcast",
-                        "event_data": data,
+                        "event_type": reason,
+                        "event_data": data["data"],
                     }
                 ).decode(),
             )
