@@ -15,7 +15,7 @@ from prometheus_api_client import PrometheusConnect
 from api.config import settings, validator_by_hotkey
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
-from api.database import SessionLocal, engine, Base
+from api.database import get_session, engine, Base
 from api.chute.schemas import Chute
 from api.server.schemas import Server
 from api.gpu.schemas import GPU
@@ -106,7 +106,7 @@ class Gepetto:
         """
         Helper to load a chute from the local database.
         """
-        async with SessionLocal() as session:
+        async with get_session() as session:
             return (
                 await session.execute(
                     select(Chute)
@@ -121,7 +121,7 @@ class Gepetto:
         """
         Helper to get the number of deployments for a chute.
         """
-        async with SessionLocal() as session:
+        async with get_session() as session:
             return (
                 await session.execute(
                     select(func.count())
@@ -141,12 +141,16 @@ class Gepetto:
         # Clean up the database.
         instance_id = None
         validator_hotkey = None
-        async with SessionLocal() as session:
+        async with get_session() as session:
             deployment = (
-                await session.execute(
-                    select(Deployment).where(Deployment.deployment_id == deployment_id)
+                (
+                    await session.execute(
+                        select(Deployment).where(Deployment.deployment_id == deployment_id)
+                    )
                 )
-            ).scalar_one_or_none()
+                .unique()
+                .scalar_one_or_none()
+            )
             if deployment:
                 instance_id = deployment.instance_id
                 validator_hotkey = deployment.validator
@@ -201,7 +205,8 @@ class Gepetto:
         """
         gpu_id = event_data["gpu_id"]
         logger.info(f"Received gpu_deleted event for {gpu_id=}")
-        async with SessionLocal() as session:
+        return
+        async with get_session() as session:
             gpu = (
                 await session.execute(select(GPU).where(GPU.gpu_id == gpu_id))
             ).scalar_one_or_none()
@@ -219,7 +224,7 @@ class Gepetto:
         """
         instance_id = event_data["instance_id"]
         logger.info(f"Received instance_deleted event for {instance_id=}")
-        async with SessionLocal() as session:
+        async with get_session() as session:
             deployment = (
                 await session.execute(
                     select(Deployment).where(Deployment.instance_id == instance_id)
@@ -238,7 +243,7 @@ class Gepetto:
         """
         server_id = event_data["server_id"]
         logger.info(f"Received server_deleted event {server_id=}")
-        async with SessionLocal() as session:
+        async with get_session() as session:
             server = (
                 await session.execute(select(Server).where(Server.server_id == server_id))
             ).scalar_one_or_none()
@@ -258,7 +263,7 @@ class Gepetto:
         version = event_data["version"]
         validator = event_data["validator"]
         logger.info(f"Received chute_deleted event for {chute_id=} {version=}")
-        async with SessionLocal() as session:
+        async with get_session() as session:
             chute = (
                 await session.execute(
                     select(Chute)
@@ -317,7 +322,7 @@ class Gepetto:
                 return
 
         # Track in inventory.
-        async with SessionLocal() as session:
+        async with get_session() as session:
             chute = Chute(
                 chute_id=chute_id,
                 validator=validator.hotkey,
@@ -390,7 +395,7 @@ class Gepetto:
             .order_by("removal_score DESC")
             .limit(1)
         )
-        async with SessionLocal() as session:
+        async with get_session() as session:
             return (await session.execute(query)).scalar_one_or_none()
 
     @staticmethod
@@ -440,7 +445,7 @@ class Gepetto:
             .order_by(text("free_gpus ASC"), Server.hourly_cost.asc())
             .limit(1)
         )
-        async with SessionLocal() as session:
+        async with get_session() as session:
             result = await session.execute(query)
             row = result.first()
             return row.Server if row else None
@@ -525,7 +530,7 @@ class Gepetto:
             .limit(1)
         )
 
-        async with SessionLocal() as session:
+        async with get_session() as session:
             result = (await session.execute(query)).first()
             if not result:
                 logger.warning(f"No preemptable deployments found: {chute.chute_id=}")
@@ -632,9 +637,9 @@ class Gepetto:
         all_deployments = set()
         k8s_chutes = await k8s.get_deployed_chutes()
         k8s_chute_ids = {c["deployment_id"] for c in k8s_chutes}
-        async with SessionLocal() as session:
+        async with get_session() as session:
             # Clean up based on deployments/instances.
-            async for row in await session.stream(select(Deployment)):
+            async for row in (await session.stream(select(Deployment))).unique():
                 deployment = row[0]
                 if deployment.instance_id and deployment.instance_id not in (
                     self.remote_instances.get(deployment.validator) or {}
@@ -684,13 +689,14 @@ class Gepetto:
 
                 # Track the list of deployments so we can reconsile with k8s state.
                 all_deployments.add(deployment.deployment_id)
+            await session.commit()
 
             # Purge k8s deployments that aren't tracked anymore.
             for deployment_id in k8s_chute_ids - all_deployments:
                 logger.warning(
                     f"Removing kubernetes deployment that is no longer tracked: {deployment_id}"
                 )
-                tasks.append(asyncio.create_task(self.undeploy(deployment.deployment_id)))
+                tasks.append(asyncio.create_task(self.undeploy(deployment_id)))
 
             # GPUs that no longer exist in validator inventory.
             all_gpus = []

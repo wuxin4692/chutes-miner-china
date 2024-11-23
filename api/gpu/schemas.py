@@ -28,4 +28,6 @@ class GPU(Base):
     verified = Column(Boolean, default=False)
 
     server = relationship("Server", back_populates="gpus", lazy="joined")
-    deployment = relationship("Deployment", back_populates="gpus")
+    deployment = relationship(
+        "Deployment", back_populates="gpus", cascade="all, delete-orphan", single_parent=True
+    )

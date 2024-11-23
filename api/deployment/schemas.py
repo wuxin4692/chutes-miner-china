@@ -31,6 +31,6 @@ class Deployment(Base):
     stub = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    gpus = relationship("GPU", back_populates="deployment", cascade="all, delete-orphan")
+    gpus = relationship("GPU", back_populates="deployment", lazy="joined")
     chute = relationship("Chute", back_populates="deployments", lazy="joined")
     server = relationship("Server", back_populates="deployments", lazy="joined")

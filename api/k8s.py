@@ -30,7 +30,7 @@ from kubernetes.client.rest import ApiException
 from sqlalchemy import select
 from api.exceptions import DeploymentFailure
 from api.config import settings
-from api.database import SessionLocal
+from api.database import get_session
 from api.server.schemas import Server
 from api.chute.schemas import Chute
 from api.deployment.schemas import Deployment
@@ -79,12 +79,13 @@ async def get_deployed_chutes() -> List[Dict]:
     )
     for deployment in deployment_list.items:
         deploy_info = {
-            "deployment_id": deployment.metadata.uid,
+            "uuid": deployment.metadata.uid,
+            "deployment_id": deployment.metadata.labels.get("chutes/deployment-id"),
             "name": deployment.metadata.name,
             "namespace": deployment.metadata.namespace,
             "labels": deployment.metadata.labels,
-            "chute_id": deployment.metadata.labels.get("chute/chute.chute-id"),
-            "version": deployment.metadata.labels.get("chute/chute.version"),
+            "chute_id": deployment.metadata.labels.get("chutes/chute-id"),
+            "version": deployment.metadata.labels.get("chutes/version"),
             "node_selector": deployment.spec.template.spec.node_selector,
         }
         pod_label_selector = ",".join(
@@ -135,7 +136,7 @@ async def undeploy(deployment_id: str):
     except Exception as exc:
         logger.warning(f"Error deleting deployment service from k8s: {exc}")
     try:
-        k8s_core_client().delete_namespaced_deployment(
+        k8s_app_client().delete_namespaced_deployment(
             name=f"chute-{deployment_id}",
             namespace=settings.namespace,
         )
@@ -152,8 +153,8 @@ async def create_code_config_map(chute: Chute):
         metadata=V1ObjectMeta(
             name=f"chute-code-{code_uuid}",
             labels={
-                "chute/chute-id": chute.chute_id,
-                "chute/version": chute.version,
+                "chutes/chute-id": chute.chute_id,
+                "chutes/version": chute.version,
             },
         ),
         data={chute.filename: chute.code},
@@ -176,7 +177,7 @@ async def deploy_chute(chute: Chute, server: Server):
     gpus_allocated = 0
     available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
     for deployment in server.deployments:
-        gpus_allocated += deployment.gpu_count
+        gpus_allocated += len(deployment.gpus)
         available_gpus -= {gpu.gpu_id for gpu in deployment.gpus}
     if len(server.gpus) - gpus_allocated - chute.gpu_count < 0:
         raise DeploymentFailure(
@@ -186,7 +187,7 @@ async def deploy_chute(chute: Chute, server: Server):
     # Immediately track this deployment (before actually creating it) to avoid allocation contention.
     deployment_id = str(uuid.uuid4())
     gpus = list([gpu for gpu in server.gpus if gpu.gpu_id in available_gpus])[: chute.gpu_count]
-    async with SessionLocal() as session:
+    async with get_session() as session:
         deployment = Deployment(
             deployment_id=deployment_id,
             server_id=server.server_id,
@@ -197,8 +198,8 @@ async def deploy_chute(chute: Chute, server: Server):
             verified=False,
             stub=True,
         )
-        deployment.gpus = gpus
         session.add(deployment)
+        deployment.gpus = gpus
         await session.commit()
 
     # Create the deployment.
@@ -209,17 +210,17 @@ async def deploy_chute(chute: Chute, server: Server):
         metadata=V1ObjectMeta(
             name=f"chute-{deployment_id}",
             labels={
-                "chute/deployment-id": deployment_id,
-                "chute/chute": "true",
-                "chute/chute-id": chute.chute_id,
-                "chute/version": chute.version,
+                "chutes/deployment-id": deployment_id,
+                "chutes/chute": "true",
+                "chutes/chute-id": chute.chute_id,
+                "chutes/version": chute.version,
             },
         ),
         spec=V1DeploymentSpec(
             replicas=1,
-            selector={"matchLabels": {"chute/deployment-id": deployment_id}},
+            selector={"matchLabels": {"chutes/deployment-id": deployment_id}},
             template=V1PodTemplateSpec(
-                metadata=V1ObjectMeta(labels={"chute/deployment-id": deployment_id}),
+                metadata=V1ObjectMeta(labels={"chutes/deployment-id": deployment_id}),
                 spec=V1PodSpec(
                     node_name=server.name,
                     volumes=[
@@ -297,16 +298,16 @@ async def deploy_chute(chute: Chute, server: Server):
         metadata=V1ObjectMeta(
             name=f"chute-service-{deployment_id}",
             labels={
-                "chute/deployment-id": deployment_id,
-                "chute/chute": "true",
-                "chute/chute-id": chute.chute_id,
-                "chute/version": chute.version,
+                "chutes/deployment-id": deployment_id,
+                "chutes/chute": "true",
+                "chutes/chute-id": chute.chute_id,
+                "chutes/version": chute.version,
             },
         ),
         spec=V1ServiceSpec(
             type="NodePort",
             selector={
-                "chute/deployment-id": deployment_id,
+                "chutes/deployment-id": deployment_id,
             },
             ports=[V1ServicePort(port=8000, target_port=8000, protocol="TCP")],
         ),
@@ -320,7 +321,7 @@ async def deploy_chute(chute: Chute, server: Server):
             namespace=settings.namespace, body=deployment
         )
         deployment_port = created_service.spec.ports[0].node_port
-        async with SessionLocal() as session:
+        async with get_session() as session:
             deployment = (
                 (
                     await session.execute(

@@ -34,7 +34,7 @@ from typing import Tuple, Dict, List
 from api.auth import sign_request
 from api.config import settings, k8s_core_client, k8s_app_client, Validator, validator_by_hotkey
 from api.util import sse_message
-from api.database import SessionLocal
+from api.database import get_session
 from api.server.schemas import Server, ServerArgs
 from api.gpu.schemas import GPU
 from api.exceptions import (
@@ -136,7 +136,7 @@ async def gather_gpu_info(
 
     # Store inventory.
     gpus = []
-    async with SessionLocal() as session:
+    async with get_session() as session:
         for device_id in range(len(devices)):
             device_info = devices[device_id]
             gpu = GPU(
@@ -263,7 +263,7 @@ async def deploy_graval(
 
         # Track the verification port.
         expected_port = created_service.spec.ports[0].node_port
-        async with SessionLocal() as session:
+        async with get_session() as session:
             result = await session.execute(
                 update(Server)
                 .where(Server.server_id == node_object.metadata.uid)
@@ -345,7 +345,7 @@ async def track_server(
     )
 
     # Track the server in our inventory.
-    async with SessionLocal() as session:
+    async with get_session() as session:
         server = Server(
             server_id=node_object.metadata.uid,
             validator=validator,
@@ -466,7 +466,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
             ...
         if delete_node and False:
             logger.info(f"Purging failed server: {node_name=} {node_uid=}")
-            async with SessionLocal() as session:
+            async with get_session() as session:
                 node = (
                     (await session.execute(select(Server).where(Server.server_id == node_uid)))
                     .unique()
@@ -536,7 +536,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         yield sse_message(
             f"successfully advertised node {node_object.metadata.uid} to validator {validator.hotkey}, received seed: {seed}"
         )
-        async with SessionLocal() as session:
+        async with get_session() as session:
             await session.execute(
                 update(Server)
                 .where(Server.server_id == node_object.metadata.uid)
@@ -571,7 +571,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
         await _cleanup(delete_node=False)
 
     # Astonishing, everything worked.
-    async with SessionLocal() as session:
+    async with get_session() as session:
         await session.execute(
             update(GPU).where(GPU.server_id == node_object.metadata.uid).values({"verified": True})
         )
