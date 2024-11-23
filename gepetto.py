@@ -9,8 +9,9 @@ import traceback
 from datetime import datetime, timedelta
 from loguru import logger
 from typing import Dict, Any, Optional
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, Float
 from sqlalchemy.orm import selectinload
+from prometheus_api_client import PrometheusConnect
 from api.config import settings
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
@@ -400,6 +401,105 @@ class Gepetto:
             result = await session.execute(query)
             row = result.first()
             return row.Server if row else None
+
+    async def optimal_preemptable_deployment(self, chute: Chute) -> Optional[Deployment]:
+        """
+        Find the optimal deployment to preempt, if you REALLY want to deploy a chute.
+        """
+        # Check last invocation time from prometheus.
+        prom = PrometheusConnect(url=settings.prometheus_url)
+        last_invocations = {}
+        try:
+            result = prom.custom_query("max by (chute_id) (invocation_last_timestamp)")
+            for metric in result:
+                chute_id = metric["metric"]["chute_id"]
+                timestamp = datetime.fromtimestamp(metric["value"][1])
+                last_invocations[chute_id] = timestamp
+        except Exception as e:
+            logger.error(f"Failed to fetch prometheus metrics: {e}")
+            pass
+
+        # Calculate cost efficiency and instance counts from remote metrics.
+        chute_metrics = {}
+        for validator_metrics in self.remote_metrics.values():
+            for metric in validator_metrics.values():
+                chute_id = metric["chute_id"]
+                if chute_id not in chute_metrics:
+                    chute_metrics[chute_id] = {"total_usage_usd": 0, "instance_count": 0}
+                chute_metrics[chute_id]["total_usage_usd"] += metric["total_usage_usd"]
+                chute_metrics[chute_id]["instance_count"] += metric["instance_count"]
+
+        # Subquery to count deployments per chute.
+        deployments_per_chute = (
+            select(
+                Deployment.chute_id, func.count(Deployment.deployment_id).label("deployment_count")
+            )
+            .group_by(Deployment.chute_id)
+            .subquery()
+        )
+
+        # Main query to find preemptable deployments, with custom scoring algo which you'll want to optimize.
+        query = (
+            select(
+                Deployment,
+                deployments_per_chute.c.deployment_count,
+                (
+                    # Higher score (more preemptable) if multiple deployments exist for this chute.
+                    case([(deployments_per_chute.c.deployment_count > 1, 100)], else_=0)
+                    +
+                    # Add score based on staleness (if available in prometheus).
+                    case([(Deployment.chute_id.in_(last_invocations.keys()), 0)], else_=50)
+                    +
+                    # Add score based on cost efficiency.
+                    case(
+                        [
+                            (
+                                Deployment.chute_id.in_(chute_metrics.keys()),
+                                func.cast(
+                                    chute_metrics[Deployment.chute_id]["instance_count"]
+                                    / func.nullif(
+                                        chute_metrics[Deployment.chute_id]["total_usage_usd"], 0
+                                    ),
+                                    Float,
+                                )
+                                * 10,
+                            )
+                        ],
+                        else_=0,
+                    )
+                ).label("preemption_score"),
+            )
+            .join(deployments_per_chute, Deployment.chute_id == deployments_per_chute.c.chute_id)
+            .join(GPU)
+            .where(
+                Deployment.chute_id != chute.chute_id,
+                GPU.model_short_ref.in_(chute.supported_gpus),
+                GPU.verified.is_(True),
+            )
+            .group_by(Deployment, deployments_per_chute.c.deployment_count)
+            .having(func.count(GPU.gpu_id) >= chute.gpu_count)
+            .order_by("preemption_score DESC")
+            .limit(1)
+        )
+
+        async with SessionLocal() as session:
+            result = (await session.execute(query)).first()
+            if not result:
+                logger.warning(f"No preemptable deployments found: {chute.chute_id=}")
+                return None
+            deployment = result.Deployment
+
+        score = result.preemption_score
+        if deployment.chute_id in last_invocations:
+            last_invocation = last_invocations[deployment.chute_id]
+            logger.warning(
+                f"Deployment {deployment.deployment_id} had recent activity: {last_invocation=}, preempting anyways..."
+            )
+        logger.info(
+            f"Selected deployment {deployment.deployment_id} for preemption "
+            f"(score: {score}, last activity: {last_invocations.get(deployment.chute_id, 'unknown')})"
+        )
+        return deployment
 
     async def scale_chute(self, chute: Chute, desired_count: int, preempt: bool = False):
         """

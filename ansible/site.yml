@@ -304,3 +304,9 @@
             }
           }
         }'
+
+    - name: Install prometheus
+      shell: |
+        microk8s helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        microk8s helm repo update
+        microk8s helm install prometheus prometheus-community/prometheus --namespace chutes --create-namespace

@@ -239,6 +239,14 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="CHUTES_EXECUTION_CONTEXT",
                                     value="REMOTE",
                                 ),
+                                V1EnvVar(
+                                    name="HTTP_PROXY",
+                                    value=settings.squid_url,
+                                ),
+                                V1EnvVar(
+                                    name="HTTPS_PROXY",
+                                    value=settings.squid_url,
+                                ),
                             ],
                             resources=V1ResourceRequirements(
                                 requests={
