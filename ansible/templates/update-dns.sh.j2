@@ -1,10 +1,12 @@
 #!/bin/bash
 
-KUBEDNS_IP=$(microk8s kubectl get svc -n kube-system kube-dns -o jsonpath='{.spec.clusterIP}')
+set -eux
 
-cat <<EOF > /etc/systemd/resolved.conf.d/kubernetes-dns.conf
+KUBEDNS_IP=$(microk8s kubectl get svc -n kube-system kube-dns -o jsonpath='{.spec.clusterIP}')
+cat <<EOF > /etc/systemd/resolved.conf
 [Resolve]
 DNS=$KUBEDNS_IP
-Domains=~svc.cluster.local
+Domains=~chutes.svc.cluster.local
+DNS=1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4
 EOF
 systemctl restart systemd-resolved

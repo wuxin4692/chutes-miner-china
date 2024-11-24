@@ -209,7 +209,7 @@
       shell: |
         microk8s enable community
         microk8s disable dns
-        microk8s enable dns:none
+        microk8s enable dns
         microk8s enable hostpath-storage
         microk8s disable calico
         microk8s enable cilium
@@ -278,16 +278,26 @@
         state: directory
         mode: '0755'
 
-    - name: Configure containerd registry
+    - name: Set registry hostname
+      set_fact:
+        registry_hostname: "registry-{{ validator }}.chutes.svc.cluster.local"
+
+    - name: Create certs.d directory for registry
+      file:
+        path: "/var/snap/microk8s/current/args/certs.d/{{ registry_hostname }}:5000"
+        state: directory
+        mode: '0755'
+
+    - name: Create hosts.toml for registry
+      template:
+        src: hosts.toml.j2
+        dest: "/var/snap/microk8s/current/args/certs.d/{{ registry_hostname }}:5000/hosts.toml"
+        mode: '0644'
+
+    - name: Configure containerd template
       template:
         src: config.toml.j2
         dest: /var/snap/microk8s/current/args/containerd-template.toml
-        mode: '0644'
-
-    - name: Set nameservers
-      template:
-        src: resolved.conf.j2
-        dest: /etc/systemd/resolved.conf
         mode: '0644'
 
     - name: Reboot
@@ -320,7 +330,7 @@
 
     - name: Fix NVidia cluster policy
       shell: |
-        microk8s kubectl wait --for=condition=Available clusterpolicy/cluster-policy -n gpu-operator --timeout=600s && \
+        microk8s kubectl wait --for=jsonpath='{.metadata.name}' clusterpolicy/cluster-policy -n gpu-operator --timeout=600s && \
         microk8s kubectl patch clusterpolicy cluster-policy --type=merge -n gpu-operator -p '
         {
           "spec": {
@@ -342,12 +352,6 @@
         microk8s helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
         microk8s helm repo update
         microk8s helm install prometheus prometheus-community/prometheus --namespace chutes --create-namespace
-
-    - name: Create resolved config directory
-      file:
-        path: /etc/systemd/resolved.conf.d
-        state: directory
-        mode: '0755'
 
     - name: Create DNS update script
       template:

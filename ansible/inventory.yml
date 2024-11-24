@@ -7,12 +7,14 @@ all:
       user: billybob
       gpu_enabled: true
       ssh_key: "ssh-rsa AAAA... billybob@machine"
+      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
     gpu-node-0:
       ansible_host: 1.2.3.4
       external_ip: 1.2.3.4
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true
+      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
       ssh_key: "ssh-rsa AAAA... billybob@machine"
 
   children:
