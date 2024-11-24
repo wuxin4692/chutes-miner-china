@@ -280,7 +280,7 @@
 
     - name: Set registry hostname
       set_fact:
-        registry_hostname: "registry-{{ validator }}.chutes.svc.cluster.local"
+        registry_hostname: "registry-{{ validator | lower }}.chutes.svc.cluster.local"
 
     - name: Create certs.d directory for registry
       file:
