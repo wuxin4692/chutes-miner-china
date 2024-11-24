@@ -78,6 +78,7 @@ class Gepetto:
                     content = content_enc.decode()
                     if content.startswith("data: "):
                         data = json.loads(content[6:])
+                        print(f"{hotkey}: {data}")
                         updated_items[data[id_key]] = data
             pointer[hotkey] = updated_items
 
@@ -721,6 +722,7 @@ class Gepetto:
                 chute = row[0]
                 identifier = f"{chute.validator}:{chute.chute_id}:{chute.version}"
                 all_chutes.add(identifier)
+                logger.info(f"FOUND CHUTE: {identifier}")
                 remote = (self.remote_chutes.get(chute.validator) or {}).get(chute.chute_id)
                 if (
                     not remote
@@ -747,6 +749,7 @@ class Gepetto:
             for validator, chutes in self.remote_chutes.items():
                 for chute_id, config in chutes.items():
                     if f"{validator}:{chute_id}:{config['version']}" not in all_chutes:
+                        logger.info(f"MISSING CHUTE: {chute_id}")
                         tasks.append(
                             asyncio.create_task(
                                 self.chute_created(

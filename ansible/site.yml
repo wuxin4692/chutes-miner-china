@@ -91,6 +91,7 @@
           - ffmpeg
           - rsyslog
           - libpq-dev
+          - snapd
         state: present
 
     - name: Set vim as default editor
@@ -200,12 +201,15 @@
         channel: "{{ microk8s_channel }}"
         classic: yes
 
-    - name: Enable MicroK8s storage
-      shell: microk8s enable hostpath-storage
-      ignore_errors: yes
-
     - name: Start MicroK8s
       shell: microk8s start
+      ignore_errors: yes
+
+    - name: Enable MicroK8s plugins
+      shell: |
+        microk8s enable hostpath-storage
+        microk8s disable calico
+        microk8s enable cilium
       ignore_errors: yes
 
     - name: Install kubernetes python package
@@ -259,6 +263,24 @@
             helm repo update
       when: enable_gpu | bool
 
+    - name: Create containerd config directory
+      file:
+        path: /var/snap/microk8s/current/args/certs.d
+        state: directory
+        mode: '0755'
+
+    - name: Configure containerd registry
+      template:
+        src: config.toml.j2
+        dest: /var/snap/microk8s/current/args/containerd-template.toml
+        mode: '0644'
+
+    - name: Set nameservers
+      template:
+        src: resolved.conf.j2
+        dest: /etc/systemd/resolved.conf
+        mode: '0644'
+
     - name: Reboot
       reboot:
         msg: "Rebooting..."
@@ -310,3 +332,31 @@
         microk8s helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
         microk8s helm repo update
         microk8s helm install prometheus prometheus-community/prometheus --namespace chutes --create-namespace
+
+    - name: Create resolved config directory
+      file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        mode: '0755'
+
+    - name: Create DNS update script
+      template:
+        src: update-dns.sh.j2
+        dest: /usr/local/bin/update-dns.sh
+        mode: '0755'
+
+    - name: Create systemd service
+      template:
+        src: update-dns.service.j2
+        dest: /etc/systemd/system/update-dns.service
+        mode: '0644'
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start update-dns service
+      systemd:
+        name: update-dns
+        state: started
+        enabled: yes
