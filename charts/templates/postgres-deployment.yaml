@@ -44,7 +44,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.postgres.database.existingSecret }}{{ .Values.postgres.database.existingSecret }}{{ else }}chutes-miner-postgres-credentials{{ end }}
+                  name: chutes-miner-postgres-secret
                   key: {{ .Values.postgres.database.passwordKey }}
           ports:
             - name: postgres

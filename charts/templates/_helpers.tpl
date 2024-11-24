@@ -28,4 +28,5 @@ app.kubernetes.io/name: chutes-porter
 
 {{- define "minerApi.labels" -}}
 app.kubernetes.io/name: chutes-miner-api
+postgres-access: "true"
 {{- end }}

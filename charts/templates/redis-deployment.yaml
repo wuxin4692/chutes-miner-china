@@ -41,8 +41,8 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.redis.password.existingSecret }}{{ .Values.redis.password.existingSecret }}{{ else }}chutes-miner-redis-secret{{ end }}
-                  key: {{ .Values.redis.password.existingSecretKey }}
+                  name: chutes-miner-redis-secret
+                  key: {{ .Values.redis.password.passwordKey }}
           ports:
             - name: redis
               containerPort: {{ .Values.redis.service.port }}

@@ -38,8 +38,9 @@ spec:
         - name: api
           image: "{{ .Values.minerApi.image }}"
           imagePullPolicy: {{ .Values.minerApi.imagePullPolicy }}
+          command: ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.minerApi.service.targetPort }}"]
           env:
-            - name: MINER_HOTKEY_SS58
+            - name: MINER_SS58
               valueFrom:
                 secretKeyRef:
                   name: miner-credentials
@@ -52,14 +53,14 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.redis.password.existingSecret }}{{ .Values.redis.password.existingSecret }}{{ else }}chutes-miner-redis-secret{{ end }}
-                  key: {{ .Values.redis.password.existingSecretKey }}
+                  name: chutes-miner-redis-secret
+                  key: {{ .Values.redis.password.passwordKey }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.postgres.database.existingSecret }}{{ .Values.postgres.database.existingSecret }}{{ else }}chutes-miner-postgres-credentials{{ end }}
+                  name: chutes-miner-postgres-secret
                   key: {{ .Values.postgres.database.passwordKey }}
-            - name: DATABASE_URL
+            - name: POSTGRESQL
               value: {{ include "postgresql.url" . }}
             - name: REDIS_URL
               value: {{ include "redis.url" . }}
@@ -67,7 +68,7 @@ spec:
               value: {{ .Values.validators | toJson | quote }}
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: {{ .Values.minerApi.service.targetPort }}
               protocol: TCP
           resources:
             {{- toYaml .Values.minerApi.resources | nindent 12 }}

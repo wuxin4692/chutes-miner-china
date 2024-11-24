@@ -1,3 +1,5 @@
+createPasswords: false  # XXX only ever set to true one time (first time)!!!
+
 validators:
   defaultRegistry: registry.chutes.ai:5000
   defaultApi: https://api.chutes.ai
@@ -26,21 +28,13 @@ porter:
       memory: "128Mi"
   affinity:
     nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: nvidia.com/gpu
-              operator: DoesNotExist
-            - key: cloud.google.com/gke-accelerator
-              operator: DoesNotExist
-            - key: k8s.amazonaws.com/accelerator
-              operator: DoesNotExist
-            - key: azure.com/gpu
-              operator: DoesNotExist
-            - key: chutes-porter
-              operator: In
-              values:
-                - "true"
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: chutes-porter
+            operator: In
+            values:
+              - "true"
 
 minerApi:
   image: parachutes/miner:latest
@@ -63,14 +57,9 @@ minerApi:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
           - matchExpressions:
-            - key: nvidia.com/gpu
-              operator: DoesNotExist
-            - key: cloud.google.com/gke-accelerator
-              operator: DoesNotExist
-            - key: k8s.amazonaws.com/accelerator
-              operator: DoesNotExist
-            - key: azure.com/gpu
-              operator: DoesNotExist
+            - key: nvidia.com/gpu.present
+              operator: NotIn
+              values: ["true"]
   tolerations: []
   annotations: {}
   labels:
@@ -94,7 +83,6 @@ postgres:
   database:
     name: chutes
     user: chutes
-    existingSecret: ""
     passwordKey: "postgres-password"
   service:
     type: ClusterIP
@@ -106,14 +94,9 @@ postgres:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: nvidia.com/gpu
-            operator: DoesNotExist
-          - key: cloud.google.com/gke-accelerator
-            operator: DoesNotExist
-          - key: k8s.amazonaws.com/accelerator
-            operator: DoesNotExist
-          - key: azure.com/gpu
-            operator: DoesNotExist
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
   tolerations: []
   annotations: {}
   labels:
@@ -129,14 +112,9 @@ redis:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: nvidia.com/gpu
-            operator: DoesNotExist
-          - key: cloud.google.com/gke-accelerator
-            operator: DoesNotExist
-          - key: k8s.amazonaws.com/accelerator
-            operator: DoesNotExist
-          - key: azure.com/gpu
-            operator: DoesNotExist
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
   tolerations: []
   resources:
     requests:
@@ -149,9 +127,7 @@ redis:
     type: ClusterIP
     port: 6379
   password:
-    existingSecret: ""
-    existingSecretKey: "redis-password"
-    value: ""
+    passwordKey: "redis-password"
   config:
     customArgs: []
   persistence:
@@ -180,14 +156,9 @@ registry:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: nvidia.com/gpu
-            operator: DoesNotExist
-          - key: cloud.google.com/gke-accelerator
-            operator: DoesNotExist
-          - key: k8s.amazonaws.com/accelerator
-            operator: DoesNotExist
-          - key: azure.com/gpu
-            operator: DoesNotExist
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
   nodeSelector: {}
   tolerations: []
   config:
@@ -220,14 +191,9 @@ squid:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: nvidia.com/gpu
-            operator: DoesNotExist
-          - key: cloud.google.com/gke-accelerator
-            operator: DoesNotExist
-          - key: k8s.amazonaws.com/accelerator
-            operator: DoesNotExist
-          - key: azure.com/gpu
-            operator: DoesNotExist
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
   nodeSelector: {}
   tolerations: []
   config:

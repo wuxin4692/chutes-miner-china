@@ -1,15 +1,19 @@
+{{- $root := . -}}
+{{- range .Values.validators.supported }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: chutes-miner-registry
+  name: registry-{{ .hotkey | lower }}
   labels:
-    {{- include "registry.labels" . | nindent 4 }}
+    {{- include "registry.labels" $root | nindent 4 }}
 spec:
-  type: {{ .Values.registry.service.type }}
+  type: {{ $root.Values.registry.service.type }}
   ports:
-    - port: {{ .Values.registry.service.port }}
-      targetPort: {{ .Values.registry.service.targetPort }}
+    - port: {{ $root.Values.registry.service.port }}
+      targetPort: {{ $root.Values.registry.service.targetPort }}
       protocol: TCP
       name: http
   selector:
-    {{- include "registry.labels" . | nindent 4 }}
+    {{- include "registry.labels" $root | nindent 4 }}
+---
+{{- end }}

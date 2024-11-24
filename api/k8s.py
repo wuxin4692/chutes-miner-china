@@ -234,7 +234,7 @@ async def deploy_chute(chute: Chute, server: Server):
                     containers=[
                         V1Container(
                             name="chute",
-                            image=f"{server.validator.lower()}.registry.{settings.namespace}.svc.cluster.local:{settings.registry_proxy_port}/{chute.image}",
+                            image=f"chutes-registry-{server.validator.lower()}.{settings.namespace}.svc.cluster.local:{settings.registry_proxy_port}/{chute.image}",
                             env=[
                                 V1EnvVar(
                                     name="CHUTES_EXECUTION_CONTEXT",
