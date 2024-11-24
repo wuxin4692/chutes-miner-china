@@ -31,6 +31,7 @@ data:
         keepalive_timeout  {{ .Values.registry.config.keepaliveTimeout }};
         client_max_body_size {{ .Values.registry.config.clientMaxBodySize }};
         server {
+            resolver 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4;
             listen {{ .Values.registry.service.targetPort }};
             location /v2/ {
                 limit_except GET {

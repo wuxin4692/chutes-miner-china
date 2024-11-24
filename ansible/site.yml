@@ -324,8 +324,17 @@
 
     - name: Fix NVidia cluster policy
       shell: |
-        microk8s kubectl wait --for=jsonpath='{.metadata.name}' clusterpolicy/cluster-policy -n gpu-operator --timeout=600s && \
-        microk8s kubectl patch clusterpolicy cluster-policy --type=merge -n gpu-operator -p '
+        sleep 15
+        microk8s enable nvidia || true
+        while ! microk8s kubectl get namespace gpu-operator-resources > /dev/null 2>&1; do
+          echo "Waiting for gpu-operator namespace to be created..."
+          sleep 5
+        done
+        while ! microk8s kubectl get clusterpolicy cluster-policy > /dev/null 2>&1; do
+          echo "Waiting for cluster-policy to be created..."
+          sleep 5
+        done
+        microk8s kubectl patch clusterpolicy cluster-policy --type=merge -p '
         {
           "spec": {
             "validator": {
