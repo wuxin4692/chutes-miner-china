@@ -20,7 +20,7 @@ class GPU(Base):
     validator = Column(String)
     server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     deployment_id = Column(
-        String, ForeignKey("deployments.deployment_id", ondelete="CASCADE"), nullable=True
+        String, ForeignKey("deployments.deployment_id", ondelete="SET NULL"), nullable=True
     )
 
     device_info = Column(JSONB, nullable=False)

@@ -58,7 +58,7 @@ class Gepetto:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await self.reconsile()
-        # await self.pubsub.start()
+        await self.pubsub.start()
 
     @staticmethod
     async def _remote_refresh_objects(

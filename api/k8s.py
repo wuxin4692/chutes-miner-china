@@ -12,6 +12,7 @@ from kubernetes.client import (
     V1Service,
     V1ObjectMeta,
     V1DeploymentSpec,
+    V1DeploymentStrategy,
     V1PodTemplateSpec,
     V1PodSpec,
     V1Container,
@@ -206,21 +207,26 @@ async def deploy_chute(chute: Chute, server: Server):
     cpu = str(server.cpu_per_gpu * chute.gpu_count)
     ram = str(server.memory_per_gpu * chute.gpu_count) + "Gi"
     code_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{chute.chute_id}::{chute.version}"))
+    deployment_labels = {
+        "chutes/deployment-id": deployment_id,
+        "chutes/chute": "true",
+        "chutes/chute-id": chute.chute_id,
+        "chutes/version": chute.version,
+        "proxy-access": "true",
+    }
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"chute-{deployment_id}",
-            labels={
-                "chutes/deployment-id": deployment_id,
-                "chutes/chute": "true",
-                "chutes/chute-id": chute.chute_id,
-                "chutes/version": chute.version,
-            },
+            labels=deployment_labels,
         ),
         spec=V1DeploymentSpec(
             replicas=1,
+            strategy=V1DeploymentStrategy(type="Recreate"),
             selector={"matchLabels": {"chutes/deployment-id": deployment_id}},
             template=V1PodTemplateSpec(
-                metadata=V1ObjectMeta(labels={"chutes/deployment-id": deployment_id}),
+                metadata=V1ObjectMeta(
+                    labels=deployment_labels,
+                ),
                 spec=V1PodSpec(
                     node_name=server.name,
                     volumes=[
@@ -235,6 +241,7 @@ async def deploy_chute(chute: Chute, server: Server):
                         V1Container(
                             name="chute",
                             image=f"registry-{server.validator.lower()}.{settings.namespace}.svc.cluster.local:{settings.registry_proxy_port}/{chute.image}",
+                            image_pull_policy="Always",
                             env=[
                                 V1EnvVar(
                                     name="CHUTES_EXECUTION_CONTEXT",
@@ -247,6 +254,10 @@ async def deploy_chute(chute: Chute, server: Server):
                                 V1EnvVar(
                                     name="HTTPS_PROXY",
                                     value=settings.squid_url,
+                                ),
+                                V1EnvVar(
+                                    name="VLLM_DISABLE_TELEMETRY",
+                                    value="1",
                                 ),
                             ],
                             resources=V1ResourceRequirements(
