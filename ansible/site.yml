@@ -207,10 +207,19 @@
 
     - name: Enable MicroK8s plugins
       shell: |
+        microk8s enable community
+        microk8s disable dns
+        microk8s enable dns:none
         microk8s enable hostpath-storage
         microk8s disable calico
         microk8s enable cilium
       ignore_errors: yes
+
+    - name: Configure CNI
+      template:
+        src: cilium.conf.j2
+        dest: /etc/cni/net.d/05-cilium.conf
+        mode: '0600'
 
     - name: Install kubernetes python package
       pip:
@@ -311,6 +320,7 @@
 
     - name: Fix NVidia cluster policy
       shell: |
+        microk8s kubectl wait --for=condition=Available clusterpolicy/cluster-policy -n gpu-operator --timeout=600s && \
         microk8s kubectl patch clusterpolicy cluster-policy --type=merge -n gpu-operator -p '
         {
           "spec": {
