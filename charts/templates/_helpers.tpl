@@ -25,3 +25,7 @@ node-bootstrap: "true"
 {{- define "porter.labels" -}}
 app.kubernetes.io/name: chutes-porter
 {{- end }}
+
+{{- define "minerApi.labels" -}}
+app.kubernetes.io/name: chutes-miner-api
+{{- end }}

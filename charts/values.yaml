@@ -9,8 +9,12 @@ validators:
 
 porter:
   enabled: true
+  service:
+    nodePort: 31000
+    port: 8000
+    targetPort: 8000
   real_host: 1.2.3.4
-  real_port: 8000
+  real_port: 32000
   image: parachutes/porter:latest
   imagePullPolicy: IfNotPresent
   resources:
@@ -50,8 +54,9 @@ minerApi:
       memory: "4Gi"
   service:
     type: NodePort
-    port: 7777
-    targetPort: 7777
+    nodePort: 32000
+    port: 8000
+    targetPort: 8000
   nodeSelector: {}
   affinity:
     nodeAffinity:
@@ -186,7 +191,7 @@ registry:
   nodeSelector: {}
   tolerations: []
   config:
-    workerProcesses: auto
+    workerProcesses: 1
     workerConnections: 1024
     keepaliveTimeout: 65
     clientMaxBodySize: "0"

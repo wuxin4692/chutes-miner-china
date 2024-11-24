@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chutes-miner-api
+  labels:
+    {{- include "minerApi.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  ports:
+    - nodePort: {{ .Values.minerApi.service.nodePort }}
+      port: {{ .Values.minerApi.service.port }}
+      targetPort: {{ .Values.minerApi.service.targetPort }}
+      name: miner-api
+  selector:
+    {{- include "minerApi.labels" . | nindent 4 }}
