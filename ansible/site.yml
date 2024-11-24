@@ -294,12 +294,6 @@
         dest: "/var/snap/microk8s/current/args/certs.d/{{ registry_hostname }}:5000/hosts.toml"
         mode: '0644'
 
-    - name: Configure containerd template
-      template:
-        src: config.toml.j2
-        dest: /var/snap/microk8s/current/args/containerd-template.toml
-        mode: '0644'
-
     - name: Reboot
       reboot:
         msg: "Rebooting..."
@@ -372,5 +366,6 @@
     - name: Enable and start update-dns service
       systemd:
         name: update-dns
-        state: started
+        state: restarted
         enabled: yes
+        daemon_reload: yes
