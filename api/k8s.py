@@ -6,7 +6,7 @@ import math
 import uuid
 import traceback
 from loguru import logger
-from typing import List, Dict
+from typing import List, Dict, Any
 from kubernetes.client import (
     V1Deployment,
     V1Service,
@@ -69,41 +69,72 @@ async def get_kubernetes_nodes() -> List[Dict]:
     return nodes
 
 
+def is_deployment_ready(deployment):
+    """
+    Check if a deployment is "ready"
+    """
+    return (
+        deployment.status.available_replicas is not None
+        and deployment.status.available_replicas == deployment.spec.replicas
+        and deployment.status.ready_replicas == deployment.spec.replicas
+        and deployment.status.updated_replicas == deployment.spec.replicas
+    )
+
+
+def _extract_deployment_info(deployment: Any) -> Dict:
+    """
+    Extract deployment info from the deployment objects.
+    """
+    deploy_info = {
+        "uuid": deployment.metadata.uid,
+        "deployment_id": deployment.metadata.labels.get("chutes/deployment-id"),
+        "name": deployment.metadata.name,
+        "namespace": deployment.metadata.namespace,
+        "labels": deployment.metadata.labels,
+        "chute_id": deployment.metadata.labels.get("chutes/chute-id"),
+        "version": deployment.metadata.labels.get("chutes/version"),
+        "node_selector": deployment.spec.template.spec.node_selector,
+    }
+    deploy_info["ready"] = is_deployment_ready(deployment)
+    pod_label_selector = ",".join(
+        [f"{k}={v}" for k, v in deployment.spec.selector.match_labels.items()]
+    )
+    pods = k8s_core_client().list_namespaced_pod(
+        namespace=deployment.metadata.namespace, label_selector=pod_label_selector
+    )
+    deploy_info["pods"] = []
+    for pod in pods.items:
+        pod_info = {
+            "name": pod.metadata.name,
+            "phase": pod.status.phase,
+        }
+        deploy_info["pods"].append(pod_info)
+        deploy_info["node"] = pod.spec.node_name
+    return deploy_info
+
+
+async def get_deployment(deployment_id: str):
+    """
+    Get a single deployment by ID.
+    """
+    deployment = k8s_app_client().read_namespaced_deployment(
+        namespace=settings.namespace,
+        name=f"chute-{deployment_id}",
+    )
+    return _extract_deployment_info(deployment)
+
+
 async def get_deployed_chutes() -> List[Dict]:
     """
-    Get all chutes deployments from kubernets.
+    Get all chutes deployments from kubernetes.
     """
     deployments = []
     label_selector = "chutes/chute=true"
-    deployment_list = k8s_app_client().list_deployment_for_all_namespaces(
-        label_selector=label_selector
+    deployment_list = k8s_app_client().list_namespaced_deployment(
+        namespace=settings.namespace, label_selector=label_selector
     )
     for deployment in deployment_list.items:
-        deploy_info = {
-            "uuid": deployment.metadata.uid,
-            "deployment_id": deployment.metadata.labels.get("chutes/deployment-id"),
-            "name": deployment.metadata.name,
-            "namespace": deployment.metadata.namespace,
-            "labels": deployment.metadata.labels,
-            "chute_id": deployment.metadata.labels.get("chutes/chute-id"),
-            "version": deployment.metadata.labels.get("chutes/version"),
-            "node_selector": deployment.spec.template.spec.node_selector,
-        }
-        pod_label_selector = ",".join(
-            [f"{k}={v}" for k, v in deployment.spec.selector.match_labels.items()]
-        )
-        pods = k8s_core_client().list_namespaced_pod(
-            namespace=deployment.metadata.namespace, label_selector=pod_label_selector
-        )
-        deploy_info["pods"] = []
-        for pod in pods.items:
-            pod_info = {
-                "name": pod.metadata.name,
-                "phase": pod.status.phase,
-            }
-            deploy_info["pods"].append(pod_info)
-            deploy_info["node"] = pod.spec.node_name
-        deployments.append(deploy_info)
+        deployments.append(_extract_deployment_info(deployment))
         logger.info(
             f"Found chute deployment: {deployment.metadata.name} in namespace {deployment.metadata.namespace}"
         )
@@ -287,6 +318,10 @@ async def deploy_chute(chute: Chute, server: Server):
                                 "8000",
                                 "--graval-seed",
                                 str(server.seed),
+                                "--miner-ss58",
+                                settings.miner_ss58,
+                                "--validator-ss58",
+                                server.validator,
                             ],
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(

@@ -57,6 +57,7 @@ class Gepetto:
         """
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        asyncio.create_task(self.announcer())
         await self.reconsile()
         await self.pubsub.start()
 
@@ -132,6 +133,72 @@ class Gepetto:
                     .where(Deployment.validator == validator)
                 )
             ).scalar()
+
+    async def announce_deployment(self, deployment: Deployment):
+        """
+        Tell a validator that our deployment is available.
+        """
+        if (vali := validator_by_hotkey(deployment.validator)) is None:
+            logger.warning(f"No validator for deployment: {deployment.deployment_id}")
+            return
+        body = {
+            "node_ids": [gpu.gpu_id for gpu in deployment.gpus],
+            "host": deployment.host,
+            "port": deployment.port,
+        }
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, payload_string = sign_request(payload=body)
+            async with session.post(
+                f"{vali.api}/instances/{deployment.chute_id}/",
+                headers=headers,
+                data=payload_string,
+            ) as resp:
+                instance = await resp.json()
+
+                # Track the instance ID.
+                async with get_session() as session:
+                    deployment = (
+                        (
+                            await session.execute(
+                                select(Deployment).where(
+                                    Deployment.deployment_id == deployment.deployment_id
+                                )
+                            )
+                        )
+                        .unique()
+                        .scalar_one_or_none()
+                    )
+                    if deployment:
+                        deployment.instance_id = instance["instance_id"]
+                        await session.commit()
+                logger.success(f"Successfully advertised instance: {instance['instance_id']}")
+
+    async def announcer(self):
+        """
+        Loop to ensure we announce all deployments, when they are ready.
+        """
+        while True:
+            try:
+                query = select(Deployment).where(
+                    Deployment.instance_id.is_(None), Deployment.stub.is_(False)
+                )
+                async with get_session() as session:
+                    deployments = (await session.execute(query)).unique().scalars()
+                if not deployments:
+                    await asyncio.sleep(5)
+                    continue
+
+                # For each deployment, check if it's ready to go in kubernetes.
+                for deployment in deployments:
+                    k8s_deployment = await k8s.get_deployment(deployment.deployment_id)
+                    if not k8s_deployment:
+                        logger.warning("NO K8s!")
+
+                    if k8s_deployment.get("ready"):
+                        await self.announce_deployment(deployment)
+            except Exception as exc:
+                logger.error(f"Error performing announcement loop: {exc}")
+                await asyncio.sleep(5)
 
     async def undeploy(self, deployment_id: str):
         """
