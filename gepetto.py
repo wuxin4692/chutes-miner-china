@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy import select, func, case, Float, text
 from sqlalchemy.orm import selectinload
 from prometheus_api_client import PrometheusConnect
-from api.config import settings, validator_by_hotkey
+from api.config import settings, validator_by_hotkey, Validator
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
 from api.database import get_session, engine, Base
@@ -200,6 +200,26 @@ class Gepetto:
                 logger.error(f"Error performing announcement loop: {exc}")
                 await asyncio.sleep(5)
 
+    @staticmethod
+    async def purge_validator_instance(vali: Validator, chute_id: str, instance_id: str):
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers, _ = sign_request(purpose="instances")
+                async with session.delete(
+                    f"{vali.api}/instances/{chute_id}/{instance_id}", headers=headers
+                ) as resp:
+                    logger.debug(await resp.text())
+                    if resp.status not in (200, 404):
+                        raise Exception(
+                            f"status_code={resp.status}, response text: {await resp.text()}"
+                        )
+                    elif resp.status == 200:
+                        logger.info(f"Deleted instance from validator {vali.hotkey}")
+                    else:
+                        logger.info(f"{instance_id=} already purged from {vali.hotkey}")
+        except Exception as exc:
+            logger.warning(f"Error purging {instance_id=} from {vali.hotkey=}: {exc}")
+
     async def undeploy(self, deployment_id: str):
         """
         Delete a deployment.
@@ -208,6 +228,7 @@ class Gepetto:
 
         # Clean up the database.
         instance_id = None
+        chute_id = None
         validator_hotkey = None
         async with get_session() as session:
             deployment = (
@@ -221,6 +242,7 @@ class Gepetto:
             )
             if deployment:
                 instance_id = deployment.instance_id
+                chute_id = deployment.chute_id
                 validator_hotkey = deployment.validator
                 await session.delete(deployment)
                 await session.commit()
@@ -228,24 +250,7 @@ class Gepetto:
         # Clean up the validator's instance record.
         if instance_id:
             if (vali := validator_by_hotkey(validator_hotkey)) is not None:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        headers, _ = sign_request(purpose="instances")
-                        async with session.delete(
-                            f"{vali.api}/instances/{instance_id}", headers=headers
-                        ) as resp:
-                            if resp.status not in (200, 404):
-                                raise Exception(
-                                    f"status_code={resp.status}, response text: {await resp.text()}"
-                                )
-                            elif resp.status == 200:
-                                logger.info(f"Deleted instance from validator {validator_hotkey}")
-                            else:
-                                logger.info(
-                                    f"{instance_id=} already purged from {validator_hotkey=}"
-                                )
-                except Exception:
-                    logger.warning(f"Error purging {instance_id=} from {validator_hotkey=}")
+                await self.purge_validator_instance(vali, chute_id, instance_id)
 
         # Purge in k8s if still there.
         await k8s.undeploy(deployment_id)
@@ -737,6 +742,7 @@ class Gepetto:
         chutes_to_remove = set()
         all_chutes = set()
         all_deployments = set()
+        all_instances = set()
         k8s_chutes = await k8s.get_deployed_chutes()
         k8s_chute_ids = {c["deployment_id"] for c in k8s_chutes}
         async with get_session() as session:
@@ -791,7 +797,21 @@ class Gepetto:
 
                 # Track the list of deployments so we can reconsile with k8s state.
                 all_deployments.add(deployment.deployment_id)
+                if deployment.instance_id:
+                    all_instances.add(deployment.instance_id)
             await session.commit()
+
+            # Purge validator instances not deployed locally.
+            for validator, instances in self.remote_instances.items():
+                if (vali := validator_by_hotkey(validator)) is None:
+                    continue
+                for instance_id, data in instances.items():
+                    if instance_id not in all_instances:
+                        chute_id = data["chute_id"]
+                        logger.warning(
+                            f"Found validator {chute_id=} {instance_id=} not deployed locally!"
+                        )
+                        await self.purge_validator_instance(vali, chute_id, instance_id)
 
             # Purge k8s deployments that aren't tracked anymore.
             for deployment_id in k8s_chute_ids - all_deployments:
