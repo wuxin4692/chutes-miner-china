@@ -84,7 +84,10 @@ class RedisListener:
                     logger.info(f"Received {event_type=} with {data=}")
                     if event_type in self.event_handlers:
                         await asyncio.gather(
-                            *[handler(data) for handler in self.event_handlers[event_type]]
+                            *[
+                                handler(data["event_data"])
+                                for handler in self.event_handlers[event_type]
+                            ]
                         )
                 except Exception as exc:
                     logger.error(f"Error processing message: {exc}")

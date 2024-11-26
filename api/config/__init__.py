@@ -74,8 +74,9 @@ class Settings(BaseSettings):
     validators_json: str = os.environ["VALIDATORS"]
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     registry_proxy_port: int = int(os.getenv("REGISTRY_PROXY_PORT", "5000"))
-    squid_url: str = f"http://chutes-miner-squid.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('SQUID_PORT', '3128')}"
-    prometheus_url: str = f"http://chutes-miner-squid.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('SQUID_PORT', '3128')}"
+    prometheus_url: str = f"http://prometheus-server.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('PROMETHEUS_PORT', '80')}"
+    hf_cache_max_age_days: int = int(os.getenv("HF_CACHE_MAX_AGE_DAYS", "7"))
+    hf_cache_max_size_gb: int = int(os.getenv("HF_CACHE_MAX_SIZE_GB", "500"))
 
     @property
     def validators(self) -> List[Validator]:

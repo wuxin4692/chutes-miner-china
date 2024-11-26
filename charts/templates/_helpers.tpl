@@ -10,8 +10,8 @@ app.kubernetes.io/name: chutes-redis
 app.kubernetes.io/name: chutes-registry
 {{- end }}
 
-{{- define "squid.labels" -}}
-app.kubernetes.io/name: chutes-squid
+{{- define "hfcache.labels" -}}
+app.kubernetes.io/name: hfcache
 {{- end }}
 
 {{- define "chutes.labels" -}}
@@ -29,4 +29,5 @@ app.kubernetes.io/name: chutes-porter
 {{- define "minerApi.labels" -}}
 app.kubernetes.io/name: chutes-miner-api
 postgres-access: "true"
+redis-access: "true"
 {{- end }}

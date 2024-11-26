@@ -49,7 +49,7 @@ class Gepetto:
         self.pubsub.on_event("chute_deleted")(self.chute_deleted)
         self.pubsub.on_event("chute_created")(self.chute_created)
         self.pubsub.on_event("chute_updated")(self.chute_updated)
-        self.pubsub.on_event("bounty_changed")(self.bounty_changed)
+        self.pubsub.on_event("bounty_change")(self.bounty_changed)
 
     async def run(self):
         """
@@ -261,7 +261,37 @@ class Gepetto:
         """
         Bounty has changed for a chute.
         """
-        logger.info(f"Received bounty_changed event: {event_data}")
+        logger.info(f"Received bounty_change event: {event_data}")
+
+        # Check if we have this thing deployed already (or in progress).
+        chute = None
+        async with get_session() as session:
+            deployment = (
+                (
+                    await session.execute(
+                        select(Deployment).where(Deployment.chute_id == event_data["chute_id"])
+                    )
+                )
+                .unique()
+                .scalar_one_or_none()
+            )
+            if deployment:
+                logger.info(
+                    f"Ignoring bounty event, already have a deployment pending: {deployment.deployment_id}"
+                )
+                return
+            chute = (
+                (
+                    await session.execute(
+                        select(Chute).where(Chute.chute_id == event_data["chute_id"])
+                    )
+                )
+                .unique()
+                .scalar_one_or_none()
+            )
+        if chute:
+            logger.info(f"Attempting to claim the bounty: {event_data}")
+            await self.scale_chute(chute, 1, preempt=True)
 
     async def gpu_deleted(self, event_data):
         """
@@ -294,10 +324,14 @@ class Gepetto:
         logger.info(f"Received instance_deleted event for {instance_id=}")
         async with get_session() as session:
             deployment = (
-                await session.execute(
-                    select(Deployment).where(Deployment.instance_id == instance_id)
+                (
+                    await session.execute(
+                        select(Deployment).where(Deployment.instance_id == instance_id)
+                    )
                 )
-            ).scalar_one_or_none()
+                .unique()
+                .scalar_one_or_none()
+            )
         if deployment:
             await self.undeploy(deployment.deployment_id)
         logger.info(f"Finished processing instance_deleted event for {instance_id=}")
@@ -382,7 +416,7 @@ class Gepetto:
                 async with aiohttp.ClientSession(raise_for_status=True) as session:
                     headers, _ = sign_request(purpose="miner")
                     async with session.get(
-                        f"{validator.api}/miners/chutes/{chute_id}/{version}", headers=headers
+                        f"{validator.api}/miner/chutes/{chute_id}/{version}", headers=headers
                     ) as resp:
                         chute_dict = await resp.json()
             except Exception:
@@ -789,7 +823,6 @@ class Gepetto:
                 chute = row[0]
                 identifier = f"{chute.validator}:{chute.chute_id}:{chute.version}"
                 all_chutes.add(identifier)
-                logger.info(f"FOUND CHUTE: {identifier}")
                 remote = (self.remote_chutes.get(chute.validator) or {}).get(chute.chute_id)
                 if (
                     not remote

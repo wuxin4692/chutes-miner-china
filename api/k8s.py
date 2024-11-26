@@ -26,6 +26,8 @@ from kubernetes.client import (
     V1VolumeMount,
     V1ConfigMapVolumeSource,
     V1ConfigMap,
+    V1HostPathVolumeSource,
+    V1SecurityContext,
 )
 from kubernetes.client.rest import ApiException
 from sqlalchemy import select
@@ -266,7 +268,51 @@ async def deploy_chute(chute: Chute, server: Server):
                             config_map=V1ConfigMapVolumeSource(
                                 name=f"chute-code-{code_uuid}",
                             ),
-                        )
+                        ),
+                        V1Volume(
+                            name="hf-cache",
+                            host_path=V1HostPathVolumeSource(
+                                path="/var/lib/hf-cache", type="DirectoryOrCreate"
+                            ),
+                        ),
+                        V1Volume(
+                            name="hf-cache-cleanup",
+                            config_map=V1ConfigMapVolumeSource(
+                                name="chutes-hf-cache-cleaner",
+                            ),
+                        ),
+                    ],
+                    init_containers=[
+                        V1Container(
+                            name="cache-init",
+                            image="python:3.10-slim",
+                            command=["/bin/bash", "-c"],
+                            args=[
+                                "pip install --no-cache-dir transformers==4.46.3 && mkdir -p /hf-cache && chmod -R 777 /hf-cache && python /scripts/hf_cache_cleanup.py"
+                            ],
+                            env=[
+                                V1EnvVar(
+                                    name="HF_HOME",
+                                    value="/hf-cache",
+                                ),
+                                V1EnvVar(
+                                    name="HF_CACHE_MAX_AGE_DAYS",
+                                    value=str(settings.hf_cache_max_age_days),
+                                ),
+                                V1EnvVar(
+                                    name="HF_CACHE_MAX_SIZE_GB",
+                                    value=str(settings.hf_cache_max_size_gb),
+                                ),
+                            ],
+                            volume_mounts=[
+                                V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
+                                V1VolumeMount(
+                                    name="hf-cache-cleanup",
+                                    mount_path="/scripts",
+                                ),
+                            ],
+                            security_context=V1SecurityContext(run_as_user=0, run_as_group=0),
+                        ),
                     ],
                     containers=[
                         V1Container(
@@ -279,17 +325,10 @@ async def deploy_chute(chute: Chute, server: Server):
                                     value="REMOTE",
                                 ),
                                 V1EnvVar(
-                                    name="HTTP_PROXY",
-                                    value=settings.squid_url,
-                                ),
-                                V1EnvVar(
-                                    name="HTTPS_PROXY",
-                                    value=settings.squid_url,
-                                ),
-                                V1EnvVar(
                                     name="VLLM_DISABLE_TELEMETRY",
                                     value="1",
                                 ),
+                                V1EnvVar(name="HF_HOME", value="/hf-cache"),
                             ],
                             resources=V1ResourceRequirements(
                                 requests={
@@ -308,7 +347,8 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="code",
                                     mount_path=f"/app/{chute.filename}",
                                     sub_path=chute.filename,
-                                )
+                                ),
+                                V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
                             ],
                             command=[
                                 "chutes",

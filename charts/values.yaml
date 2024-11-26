@@ -1,5 +1,9 @@
 createPasswords: false  # XXX only ever set to true one time (first time)!!!
 
+hfCache:
+  maxAgeDays: 7
+  maxSizeGB: 500
+
 validators:
   defaultRegistry: registry.chutes.ai:5000
   defaultApi: https://api.chutes.ai
@@ -171,69 +175,3 @@ registry:
       allowedHosts:
         - "registry.chutes.ai:5000"
       defaultUpstream: "registry.chutes.ai:5000"
-
-squid:
-  image: "ubuntu/squid:5.2-22.04_beta"
-  imagePullPolicy: IfNotPresent
-  replicaCount: 1
-  service:
-    type: ClusterIP
-    port: 3128
-  resources:
-    requests:
-      cpu: 2
-      memory: 16Gi
-    limits:
-      cpu: 2
-      memory: 16Gi
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: nvidia.com/gpu.present
-            operator: NotIn
-            values: ["true"]
-  nodeSelector: {}
-  tolerations: []
-  config:
-    allowedNetworks:
-      - 10.0.0.0/8
-      - 172.16.0.0/12
-      - 192.168.0.0/16
-    maxRequestSize: 100000 MB
-    cacheSize: 8192  # GB
-    diskCache:
-      size: 2000000  # MB
-      level1: 1024
-      level2: 256
-    readAheadSize: 1048576
-    bufferSize: 1048576
-    workerThreads: 32
-    pipelineRequests: 32
-    refreshPatterns:
-      - pattern: "\\.safetensors$"
-        min: 10080  # 7 days
-        percent: 100
-        max: 43200  # 30 days
-      - pattern: "\\.bin$"
-        min: 10080
-        percent: 100
-        max: 43200
-      - pattern: "\\.pt$"
-        min: 10080
-        percent: 100
-        max: 43200
-      - pattern: "\\.pth$"
-        min: 10080
-        percent: 100
-        max: 43200
-      - pattern: "\\.ckpt$"
-        min: 10080
-        percent: 100
-        max: 43200
-  persistence:
-    enabled: true
-    accessMode: ReadWriteOnce
-    size: 2100Gi
-    storageClass: ""
