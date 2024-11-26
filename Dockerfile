@@ -28,6 +28,10 @@ RUN poetry install
 ENV PYTHONPATH=/app
 ENTRYPOINT poetry run python porter.py --real-host $REAL_AXON_HOST --real-port $REAL_AXON_PORT --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58
 
+# Cache cleaner.
+FROM python:3.10-slim AS cacheclean
+RUN pip install --no-cache-dir transformers==4.46.3
+
 # GraVal bootstrap.
 FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS bootstrap
 RUN apt-get -y update

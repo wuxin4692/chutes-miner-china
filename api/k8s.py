@@ -28,6 +28,7 @@ from kubernetes.client import (
     V1ConfigMap,
     V1HostPathVolumeSource,
     V1SecurityContext,
+    V1EmptyDirVolumeSource,
 )
 from kubernetes.client.rest import ApiException
 from sqlalchemy import select
@@ -281,14 +282,18 @@ async def deploy_chute(chute: Chute, server: Server):
                                 name="chutes-hf-cache-cleaner",
                             ),
                         ),
+                        V1Volume(
+                            name="tmp",
+                            empty_dir=V1EmptyDirVolumeSource(size_limit="10Gi"),
+                        ),
                     ],
                     init_containers=[
                         V1Container(
                             name="cache-init",
-                            image="python:3.10-slim",
+                            image="parachutes/hf-cache-cleaner:latest",
                             command=["/bin/bash", "-c"],
                             args=[
-                                "pip install --no-cache-dir transformers==4.46.3 && mkdir -p /hf-cache && chmod -R 777 /hf-cache && python /scripts/hf_cache_cleanup.py"
+                                "mkdir -p /hf-cache && chmod -R 777 /hf-cache && python /scripts/hf_cache_cleanup.py"
                             ],
                             env=[
                                 V1EnvVar(
@@ -349,7 +354,11 @@ async def deploy_chute(chute: Chute, server: Server):
                                     sub_path=chute.filename,
                                 ),
                                 V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
+                                V1VolumeMount(name="tmp", mount_path="/tmp"),
                             ],
+                            security_context=V1SecurityContext(
+                                read_only_root_filesystem=True,
+                            ),
                             command=[
                                 "chutes",
                                 "run",

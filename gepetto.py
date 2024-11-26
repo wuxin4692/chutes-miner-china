@@ -57,8 +57,9 @@ class Gepetto:
         """
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        asyncio.create_task(self.announcer())
         await self.reconsile()
+        asyncio.create_task(self.announcer())
+        asyncio.create_task(self.autoscaler())
         await self.pubsub.start()
 
     @staticmethod
@@ -79,7 +80,6 @@ class Gepetto:
                     content = content_enc.decode()
                     if content.startswith("data: "):
                         data = json.loads(content[6:])
-                        print(f"{hotkey}: {data}")
                         updated_items[data[id_key]] = data
             pointer[hotkey] = updated_items
 
@@ -133,6 +133,18 @@ class Gepetto:
                     .where(Deployment.validator == validator)
                 )
             ).scalar()
+
+    @staticmethod
+    async def get_chute(chute_id: str) -> Optional[Chute]:
+        """
+        Load a chute by ID.
+        """
+        async with get_session() as session:
+            return (
+                (await session.execute(select(Chute).where(Chute.chute_id == chute_id)))
+                .unique()
+                .scalar_one_or_none()
+            )
 
     async def announce_deployment(self, deployment: Deployment):
         """
@@ -199,6 +211,104 @@ class Gepetto:
             except Exception as exc:
                 logger.error(f"Error performing announcement loop: {exc}")
                 await asyncio.sleep(5)
+
+    async def _autoscale(self):
+        """
+        Autoscale chutes, based on metrics and server availability.
+        """
+        for validator in settings.validators:
+            await self._remote_refresh_objects(
+                self.remote_metrics, validator.hotkey, f"{validator.api}/miner/metrics/", "chute_id"
+            )
+
+        # Count the number of deployments for each chute
+        chute_values = []
+        for validator, chutes in self.remote_chutes.items():
+            for chute_id, chute_info in chutes.items():
+                try:
+                    # Count how many deployments we already have.
+                    local_count = await self.count_deployments(
+                        chute_id, chute_info["version"], validator
+                    )
+
+                    # If there are no metrics, it means the chute is not being actively used, so don't scale.
+                    metrics = self.remote_metrics.get(validator, {}).get(chute_id, {})
+                    if not metrics:
+                        logger.info(self.remote_metrics)
+                        logger.info(f"No metrics for {chute_id=}, scaling would be unproductive...")
+                        continue
+
+                    # If we have all deployments already (no other miner has this) then no need to scale.
+                    total_count = metrics["instance_count"]
+                    if local_count >= total_count:
+                        logger.info(
+                            f"We have all deployments for {chute_id=}, scaling would be unproductive..."
+                        )
+                        continue
+
+                    # Calculate potential gain from a new deployment.
+                    potential_gain = (
+                        metrics["total_usage_usd"]
+                        if not total_count
+                        else metrics["total_usage_usd"] / (total_count + 1)
+                    )
+
+                    # See if we have a server that could even handle it.
+                    chute = await self.load_chute(chute_id, chute_info["version"], validator)
+                    if not chute:
+                        logger.warning(f"Chute not found locally? {chute_id=}")
+                        continue
+                    potential_server = await self.optimal_scale_up_server(chute)
+                    if not potential_server:
+                        logger.info(f"No viable server to scale {chute_id=}")
+                        continue
+
+                    # Calculate value ratio
+                    chute_value = potential_gain / potential_server.hourly_cost
+                    logger.info(
+                        f"Estimated {potential_gain=} for name={chute_info['name']} chute_id= on {validator=}, "
+                        f"optimal server hourly cost={potential_server.hourly_cost} "
+                        f"on server {potential_server.name}, {chute_value=} "
+                        f"{local_count=} {total_count=}"
+                    )
+                    chute_values.append((validator, chute_id, chute_value))
+
+                except Exception as e:
+                    logger.error(f"Error processing chute {chute_id}: {e}")
+                    continue
+
+        if not chute_values:
+            logger.info("No benefit in scaling, or no ability to do so...")
+            return
+
+        # Sort by value and attempt to deploy the highest value chute
+        chute_values.sort(key=lambda x: x[2], reverse=True)
+        best_validator, best_chute_id, best_value = chute_values[0]
+        if (
+            chute := await self.load_chute(
+                best_chute_id,
+                self.remote_chutes[best_validator][best_chute_id]["version"],
+                best_validator,
+            )
+        ) is not None:
+            current_count = await self.count_deployments(
+                best_chute_id, chute.version, best_validator
+            )
+            logger.info(f"Scaling up {best_chute_id} for validator {best_validator}")
+            await self.scale_chute(chute, current_count + 1, preempt=False)
+
+    async def autoscaler(self):
+        """
+        Main autoscaling loop.
+        """
+        while True:
+            try:
+                await self._autoscale()
+            except Exception as exc:
+                logger.error(
+                    f"Unexpected error in autoscaling loop: {exc}\n{traceback.format_exc()}"
+                )
+            await asyncio.sleep(15)
 
     @staticmethod
     async def purge_validator_instance(vali: Validator, chute_id: str, instance_id: str):
@@ -285,15 +395,7 @@ class Gepetto:
                     f"Ignoring bounty event, already have a deployment pending: {deployment.deployment_id}"
                 )
                 return
-            chute = (
-                (
-                    await session.execute(
-                        select(Chute).where(Chute.chute_id == event_data["chute_id"])
-                    )
-                )
-                .unique()
-                .scalar_one_or_none()
-            )
+            chute = self.get_chute(event_data["chute_id"])
         if chute:
             logger.info(f"Attempting to claim the bounty: {event_data}")
             await self.scale_chute(chute, 1, preempt=True)
@@ -787,16 +889,22 @@ class Gepetto:
 
                 # Delete any deployments from the DB that either never made it past the stub stage or that aren't in k8s anymore.
                 if not deployment.stub and deployment.deployment_id not in k8s_chute_ids:
-                    logger.warning(f"Deployment has disappeared from kubernetes: {deployment.deployment_id}")
+                    logger.warning(
+                        f"Deployment has disappeared from kubernetes: {deployment.deployment_id}"
+                    )
                     if deployment.instance_id:
                         if (vali := validator_by_hotkey(deployment.validator)) is not None:
-                            await self.purge_validator_instance(vali, deployment.chute_id, deployment.instance_id)
+                            await self.purge_validator_instance(
+                                vali, deployment.chute_id, deployment.instance_id
+                            )
                     await session.delete(deployment)
 
                 elif deployment.stub and datetime.utcnow() - deployment.created_at >= timedelta(
                     minutes=30
                 ):
-                    logger.warning(f"Deployment is still a stub after 30 minutes, deleting! {deployment.deployment_id}")
+                    logger.warning(
+                        f"Deployment is still a stub after 30 minutes, deleting! {deployment.deployment_id}"
+                    )
                     await session.delete(deployment)
 
                 # Track the list of deployments so we can reconsile with k8s state.
