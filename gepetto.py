@@ -787,12 +787,16 @@ class Gepetto:
 
                 # Delete any deployments from the DB that either never made it past the stub stage or that aren't in k8s anymore.
                 if not deployment.stub and deployment.deployment_id not in k8s_chute_ids:
-                    logger.warning(f"Deployment has disappeared from kubernetes: {deployment}")
+                    logger.warning(f"Deployment has disappeared from kubernetes: {deployment.deployment_id}")
+                    if deployment.instance_id:
+                        if (vali := validator_by_hotkey(deployment.validator)) is not None:
+                            await self.purge_validator_instance(vali, deployment.chute_id, deployment.instance_id)
                     await session.delete(deployment)
+
                 elif deployment.stub and datetime.utcnow() - deployment.created_at >= timedelta(
                     minutes=30
                 ):
-                    logger.warning(f"Deployment is still a stub after 30 minutes! {deployment}")
+                    logger.warning(f"Deployment is still a stub after 30 minutes, deleting! {deployment.deployment_id}")
                     await session.delete(deployment)
 
                 # Track the list of deployments so we can reconsile with k8s state.
