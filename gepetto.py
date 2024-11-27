@@ -246,7 +246,7 @@ class Gepetto:
 
                     # If we have all deployments already (no other miner has this) then no need to scale.
                     total_count = metrics["instance_count"]
-                    if local_count >= total_count:
+                    if local_count and local_count >= total_count:
                         logger.info(
                             f"We have all deployments for {chute_id=}, scaling would be unproductive..."
                         )
