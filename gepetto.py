@@ -6,10 +6,10 @@ import aiohttp
 import asyncio
 import orjson as json
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 from typing import Dict, Any, Optional
-from sqlalchemy import select, func, case, Float, text
+from sqlalchemy import select, func, case, Float, text, literal, and_, or_
 from sqlalchemy.orm import selectinload
 from prometheus_api_client import PrometheusConnect
 from api.config import settings, validator_by_hotkey, Validator
@@ -135,13 +135,19 @@ class Gepetto:
             ).scalar()
 
     @staticmethod
-    async def get_chute(chute_id: str) -> Optional[Chute]:
+    async def get_chute(chute_id: str, validator: str) -> Optional[Chute]:
         """
         Load a chute by ID.
         """
         async with get_session() as session:
             return (
-                (await session.execute(select(Chute).where(Chute.chute_id == chute_id)))
+                (
+                    await session.execute(
+                        select(Chute).where(
+                            Chute.chute_id == chute_id, Chute.validator == validator
+                        )
+                    )
+                )
                 .unique()
                 .scalar_one_or_none()
             )
@@ -395,7 +401,7 @@ class Gepetto:
                     f"Ignoring bounty event, already have a deployment pending: {deployment.deployment_id}"
                 )
                 return
-            chute = self.get_chute(event_data["chute_id"])
+            chute = await self.get_chute(event_data["chute_id"], event_data["validator"])
         if chute:
             logger.info(f"Attempting to claim the bounty: {event_data}")
             await self.scale_chute(chute, 1, preempt=True)
@@ -513,22 +519,21 @@ class Gepetto:
 
         # Already in inventory?
         if (chute := await self.load_chute(chute_id, version, validator_hotkey)) is not None:
-            logger.info(f"Chute {chute_id=} {version=} is already tracked in inventory.")
+            logger.info(f"Chute {chute_id=} {version=} is already tracked in inventory?")
             return
 
         # Load the chute details, preferably from the local cache.
-        chute_dict = (self.remote_chutes.get(validator_hotkey) or {}).get(chute_id)
-        if not chute_dict or chute_dict["version"] != version:
-            try:
-                async with aiohttp.ClientSession(raise_for_status=True) as session:
-                    headers, _ = sign_request(purpose="miner")
-                    async with session.get(
-                        f"{validator.api}/miner/chutes/{chute_id}/{version}", headers=headers
-                    ) as resp:
-                        chute_dict = await resp.json()
-            except Exception:
-                logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
-                return
+        chute_dict = None
+        try:
+            async with aiohttp.ClientSession(raise_for_status=True) as session:
+                headers, _ = sign_request(purpose="miner")
+                async with session.get(
+                    f"{validator.api}/miner/chutes/{chute_id}/{version}", headers=headers
+                ) as resp:
+                    chute_dict = await resp.json()
+        except Exception:
+            logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
+            return
 
         # Track in inventory.
         async with get_session() as session:
@@ -583,7 +588,7 @@ class Gepetto:
             select(
                 Server.server_id,
                 func.count(GPU.gpu_id).label("total_gpus"),
-                func.sum(case([(GPU.deployment_id != None, 1)], else_=0)).label("used_gpus"),  # noqa
+                func.sum(case((GPU.deployment_id != None, 1), else_=0)).label("used_gpus"),  # noqa
             )
             .join(GPU)
             .group_by(Server.server_id)
@@ -661,9 +666,11 @@ class Gepetto:
 
     async def optimal_preemptable_deployment(self, chute: Chute) -> Optional[Deployment]:
         """
-        Find the optimal deployment to preempt, if you REALLY want to deploy a chute.
+        Find the optimal deployment to preempt, prioritizing low-value deployments.
+        Value is determined by usage revenue divided by server cost.
+        Takes into account different validators to avoid conflicts with same chute IDs.
         """
-        # Check last invocation time from prometheus.
+        # Get the prometheus data for staleness check
         prom = PrometheusConnect(url=settings.prometheus_url)
         last_invocations = {}
         try:
@@ -676,73 +683,93 @@ class Gepetto:
             logger.error(f"Failed to fetch prometheus metrics: {e}")
             pass
 
-        # Calculate cost efficiency and instance counts from remote metrics.
-        chute_metrics = {}
-        for validator_metrics in self.remote_metrics.values():
-            for metric in validator_metrics.values():
-                chute_id = metric["chute_id"]
-                if chute_id not in chute_metrics:
-                    chute_metrics[chute_id] = {"total_usage_usd": 0, "instance_count": 0}
-                chute_metrics[chute_id]["total_usage_usd"] += metric["total_usage_usd"]
-                chute_metrics[chute_id]["instance_count"] += metric["instance_count"]
+        # Calculate value metrics for each chute per validator
+        chute_values = {}
+        for validator, validator_metrics in self.remote_metrics.items():
+            for chute_id, metric in validator_metrics.items():
+                key = (validator, chute_id)  # Composite key of validator and chute_id
+                instance_count = metric["instance_count"]
+                # Calculate value per instance
+                value_per_instance = (
+                    0 if not instance_count else metric["total_usage_usd"] / instance_count
+                )
+                chute_values[key] = value_per_instance
 
-        # Subquery to count deployments per chute.
+        # Create conditions for value matching
+        value_conditions = []
+        for (val, chute_id), value in chute_values.items():
+            value_conditions.append(
+                and_(
+                    Deployment.validator == val,
+                    Deployment.chute_id == chute_id,
+                    literal(value, Float),
+                )
+            )
+
+        # Subquery to count deployments per chute and validator
         deployments_per_chute = (
             select(
-                Deployment.chute_id, func.count(Deployment.deployment_id).label("deployment_count")
+                Deployment.chute_id,
+                Deployment.validator,
+                func.count(Deployment.deployment_id).label("deployment_count"),
             )
-            .group_by(Deployment.chute_id)
+            .group_by(Deployment.chute_id, Deployment.validator)
             .subquery()
         )
 
-        # Main query to find preemptable deployments, with custom scoring algo which you'll want to optimize.
+        # Main query to find preemptable deployments
         query = (
             select(
                 Deployment,
                 deployments_per_chute.c.deployment_count,
                 (
-                    # Higher score (more preemptable) if multiple deployments exist for this chute.
-                    case([(deployments_per_chute.c.deployment_count > 1, 100)], else_=0)
-                    +
-                    # Add score based on staleness (if available in prometheus).
-                    case([(Deployment.chute_id.in_(last_invocations.keys()), 0)], else_=50)
-                    +
-                    # Add score based on cost efficiency.
+                    # Base score on inverse of deployment value
                     case(
-                        [
+                        *[
                             (
-                                Deployment.chute_id.in_(chute_metrics.keys()),
+                                and_(Deployment.validator == val, Deployment.chute_id == chute_id),
                                 func.cast(
-                                    chute_metrics[Deployment.chute_id]["instance_count"]
-                                    / func.nullif(
-                                        chute_metrics[Deployment.chute_id]["total_usage_usd"], 0
-                                    ),
-                                    Float,
+                                    1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float
                                 )
-                                * 10,
+                                * 100,
                             )
+                            for (val, chute_id), value in chute_values.items()
                         ],
-                        else_=0,
+                        else_=100,  # If no metrics, assume low value
                     )
+                    +
+                    # Bonus score for multiple deployments
+                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0)
+                    +
+                    # Bonus score for stale deployments
+                    case((Deployment.chute_id.in_(last_invocations.keys()), 0), else_=25)
                 ).label("preemption_score"),
             )
-            .join(deployments_per_chute, Deployment.chute_id == deployments_per_chute.c.chute_id)
+            .join(
+                deployments_per_chute,
+                and_(
+                    Deployment.chute_id == deployments_per_chute.c.chute_id,
+                    Deployment.validator == deployments_per_chute.c.validator,
+                ),
+            )
             .join(GPU)
             .where(
-                Deployment.chute_id != chute.chute_id,
+                or_(Deployment.chute_id != chute.chute_id, Deployment.validator != chute.validator),
                 GPU.model_short_ref.in_(chute.supported_gpus),
                 GPU.verified.is_(True),
             )
             .group_by(Deployment, deployments_per_chute.c.deployment_count)
             .having(func.count(GPU.gpu_id) >= chute.gpu_count)
-            .order_by("preemption_score DESC")
+            .order_by(text("preemption_score DESC"))
             .limit(1)
         )
 
         async with get_session() as session:
             result = (await session.execute(query)).first()
             if not result:
-                logger.warning(f"No preemptable deployments found: {chute.chute_id=}")
+                logger.warning(
+                    f"No preemptable deployments found: {chute.chute_id=} {chute.validator=}"
+                )
                 return None
             deployment = result.Deployment
 
@@ -750,11 +777,15 @@ class Gepetto:
         if deployment.chute_id in last_invocations:
             last_invocation = last_invocations[deployment.chute_id]
             logger.warning(
-                f"Deployment {deployment.deployment_id} had recent activity: {last_invocation=}, preempting anyways..."
+                f"Deployment {deployment.deployment_id} had recent activity: {last_invocation=}, "
+                f"preempting anyways..."
             )
+
+        value = chute_values.get((deployment.validator, deployment.chute_id), 0)
         logger.info(
             f"Selected deployment {deployment.deployment_id} for preemption "
-            f"(score: {score}, last activity: {last_invocations.get(deployment.chute_id, 'unknown')})"
+            f"(validator: {deployment.validator}, score: {score}, value: {value:.2f}, "
+            f"last activity: {last_invocations.get(deployment.chute_id, 'unknown')})"
         )
         return deployment
 
@@ -802,7 +833,7 @@ class Gepetto:
                         if preempt:
                             if (
                                 deployment := await self.optimal_preemptable_deployment(chute)
-                            ) is not None:
+                            ) is None:
                                 # No deployments are within the scale down time so we can't do anything.
                                 logger.error(
                                     f"Preempting impossible right now, sorry: {chute.chute_id}"
@@ -811,7 +842,7 @@ class Gepetto:
                             logger.info(
                                 f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
                             )
-                            await self.undeploy(deployment)
+                            await self.undeploy(deployment.deployment_id)
                         else:
                             return
                     else:
@@ -899,9 +930,9 @@ class Gepetto:
                             )
                     await session.delete(deployment)
 
-                elif deployment.stub and datetime.utcnow() - deployment.created_at >= timedelta(
-                    minutes=30
-                ):
+                elif deployment.stub and datetime.now(
+                    timezone.utc
+                ) - deployment.created_at >= timedelta(minutes=30):
                     logger.warning(
                         f"Deployment is still a stub after 30 minutes, deleting! {deployment.deployment_id}"
                     )

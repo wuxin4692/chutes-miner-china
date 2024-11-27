@@ -286,6 +286,10 @@ async def deploy_chute(chute: Chute, server: Server):
                             name="tmp",
                             empty_dir=V1EmptyDirVolumeSource(size_limit="10Gi"),
                         ),
+                        V1Volume(
+                            name="shm",
+                            empty_dir=V1EmptyDirVolumeSource(medium="Memory", size_limit="16Gi"),
+                        ),
                     ],
                     init_containers=[
                         V1Container(
@@ -316,7 +320,10 @@ async def deploy_chute(chute: Chute, server: Server):
                                     mount_path="/scripts",
                                 ),
                             ],
-                            security_context=V1SecurityContext(run_as_user=0, run_as_group=0),
+                            security_context=V1SecurityContext(
+                                run_as_user=0,
+                                run_as_group=0,
+                            ),
                         ),
                     ],
                     containers=[
@@ -332,6 +339,34 @@ async def deploy_chute(chute: Chute, server: Server):
                                 V1EnvVar(
                                     name="VLLM_DISABLE_TELEMETRY",
                                     value="1",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_DEBUG",
+                                    value="INFO",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_SOCKET_IFNAME",
+                                    value="^docker,lo",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_P2P_DISABLE",
+                                    value="1",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_IB_DISABLE",
+                                    value="1",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_SHM_DISABLE",
+                                    value="0",
+                                ),
+                                V1EnvVar(
+                                    name="NCCL_NET_GDR_LEVEL",
+                                    value="0",
+                                ),
+                                V1EnvVar(
+                                    name="CUDA_VISIBLE_DEVICES",
+                                    value=",".join([str(idx) for idx in range(chute.gpu_count)]),
                                 ),
                                 V1EnvVar(name="HF_HOME", value="/hf-cache"),
                             ],
@@ -355,9 +390,12 @@ async def deploy_chute(chute: Chute, server: Server):
                                 ),
                                 V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
                                 V1VolumeMount(name="tmp", mount_path="/tmp"),
+                                V1VolumeMount(name="shm", mount_path="/dev/shm"),
                             ],
                             security_context=V1SecurityContext(
-                                read_only_root_filesystem=True,
+                                # XXX Would love to add this, but vllm (and likely other libraries) love writing files...
+                                # read_only_root_filesystem=True,
+                                capabilities={"add": ["IPC_LOCK"]},
                             ),
                             command=[
                                 "chutes",
