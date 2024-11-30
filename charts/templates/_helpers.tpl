@@ -31,3 +31,9 @@ app.kubernetes.io/name: chutes-miner-api
 postgres-access: "true"
 redis-access: "true"
 {{- end }}
+
+{{- define "gepetto.labels" -}}
+app.kubernetes.io/name: chutes-miner-gepetto
+postgres-access: "true"
+redis-access: "true"
+{{- end }}

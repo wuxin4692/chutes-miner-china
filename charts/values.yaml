@@ -65,9 +65,27 @@ minerApi:
               operator: NotIn
               values: ["true"]
   tolerations: []
-  annotations: {}
-  labels:
-    app: miner
+
+gepetto:
+  image: parachutes/miner:latest
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: nvidia.com/gpu.present
+              operator: NotIn
+              values: ["true"]
+  tolerations: []
 
 postgres:
   image: postgres:15
@@ -102,9 +120,6 @@ postgres:
             operator: NotIn
             values: ["true"]
   tolerations: []
-  annotations: {}
-  labels:
-    app: postgres
 
 redis:
   image: redis:7
@@ -171,7 +186,6 @@ registry:
     keepaliveTimeout: 65
     clientMaxBodySize: "0"
     validators:
-      headerName: "X-Registry-Upstream"
       allowedHosts:
         - "registry.chutes.ai:5000"
       defaultUpstream: "registry.chutes.ai:5000"
