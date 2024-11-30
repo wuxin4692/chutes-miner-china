@@ -407,6 +407,23 @@ class Gepetto:
             logger.info(f"Attempting to claim the bounty: {event_data}")
             await self.scale_chute(chute, 1, preempt=True)
 
+    @staticmethod
+    async def remove_gpu_from_validator(validator: Validator, gpu_id: str):
+        """
+        Purge a GPU from validator inventory.
+        """
+        try:
+            async with aiohttp.ClientSession(raise_for_status=True) as http_session:
+                headers, _ = sign_request(purpose="nodes")
+                async with http_session.delete(
+                    f"{validator.api}/nodes/{gpu_id}", headers=headers
+                ) as resp:
+                    logger.success(
+                        f"Successfully purged {gpu_id=} from validator={validator.hotkey}: {await resp.json()}"
+                    )
+        except Exception as exc:
+            logger.error(f"Error purging {gpu_id=} from validator={validator.hotkey}: {exc}")
+
     async def gpu_deleted(self, event_data):
         """
         GPU no longer exists in validator inventory for some reason.
@@ -428,17 +445,7 @@ class Gepetto:
                     await self.undeploy(gpu.deployment_id)
                 validator_hotkey = gpu.validator
                 if (validator := validator_by_hotkey(validator_hotkey)) is not None:
-                    try:
-                        async with aiohttp.ClientSession(raise_for_status=True) as http_session:
-                            headers, _ = sign_request(purpose="nodes")
-                            async with http_session.delete(
-                                f"{validator.api}/nodes/{gpu.gpu_id}", headers=headers
-                            ) as resp:
-                                logger.success(
-                                    f"Successfully purged {gpu.gpu_id=} from validator={validator_hotkey}: {await resp.json()}"
-                                )
-                    except Exception as exc:
-                        logger.error(f"Error purging GPU from validator={validator_hotkey}: {exc}")
+                    await self.remove_gpu_from_validator(validator, gpu_id)
                 await session.delete(gpu)
                 await session.commit()
         logger.info(f"Finished processing gpu_deleted event for {gpu_id=}")
@@ -985,10 +992,12 @@ class Gepetto:
             all_gpus = []
             for nodes in self.remote_nodes.values():
                 all_gpus += list(nodes)
+            local_gpu_ids = set()
             async for row in (
                 await session.stream(select(GPU).where(GPU.verified.is_(True)))
             ).unique():
                 gpu = row[0]
+                local_gpu_ids.add(gpu.gpu_id)
                 if gpu.gpu_id not in all_gpus:
                     logger.warning(
                         f"GPU {gpu.gpu_id} is no longer in validator {gpu.validator} inventory"
@@ -998,6 +1007,16 @@ class Gepetto:
                             self.gpu_deleted({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
                         )
                     )
+
+            # GPUs in validator inventory that don't exist locally.
+            for validator_hotkey, nodes in self.remote_nodes.items():
+                for gpu_id in nodes:
+                    if gpu_id not in local_gpu_ids:
+                        logger.warning(
+                            f"Found GPU in inventory of {validator_hotkey} that is not local: {gpu_id}"
+                        )
+                        if (validator := validator_by_hotkey(validator_hotkey)) is not None:
+                            await self.remove_gpu_from_validator(validator, gpu_id)
 
             # Chutes that were removed/outdated.
             async for row in await session.stream(select(Chute)):
@@ -1030,7 +1049,7 @@ class Gepetto:
             for validator, chutes in self.remote_chutes.items():
                 for chute_id, config in chutes.items():
                     if f"{validator}:{chute_id}:{config['version']}" not in all_chutes:
-                        logger.info(f"MISSING CHUTE: {chute_id}")
+                        logger.info(f"Found a new/untracked chute: {chute_id}")
                         tasks.append(
                             asyncio.create_task(
                                 self.chute_created(
