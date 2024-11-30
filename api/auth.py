@@ -50,7 +50,9 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
             or validator not in allowed_signers
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away 0")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="go away (missing)"
+            )
         signature_string = ":".join(
             [
                 miner,
@@ -61,7 +63,8 @@ def authorize(allow_miner=False, allow_validator=False, purpose: str = None):
         )
         if not get_keypair(validator).verify(signature_string, bytes.fromhex(signature)):
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail=f"go away: {signature_string}"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"go away: (sig): {request.state.body_sha256=} {signature_string=}",
             )
 
     return _authorize

@@ -377,6 +377,7 @@ class Gepetto:
         Validator has finished verifying a GPU, so it is ready for use.
         """
         logger.info(f"Received gpu_added event: {event_data}")
+        # Nothing to do here really, the autoscaler should take care of it, but feel free to change...
 
     async def bounty_changed(self, event_data):
         """
@@ -416,14 +417,28 @@ class Gepetto:
         """
         gpu_id = event_data["gpu_id"]
         logger.info(f"Received gpu_deleted event for {gpu_id=}")
-        return
         async with get_session() as session:
             gpu = (
-                await session.execute(select(GPU).where(GPU.gpu_id == gpu_id))
-            ).scalar_one_or_none()
+                (await session.execute(select(GPU).where(GPU.gpu_id == gpu_id)))
+                .unique()
+                .scalar_one_or_none()
+            )
             if gpu:
                 if gpu.deployment:
                     await self.undeploy(gpu.deployment_id)
+                validator_hotkey = gpu.validator
+                if (validator := validator_by_hotkey(validator_hotkey)) is not None:
+                    try:
+                        async with aiohttp.ClientSession(raise_for_status=True) as http_session:
+                            headers, _ = sign_request(purpose="nodes")
+                            async with http_session.delete(
+                                f"{validator.api}/nodes/{gpu.gpu_id}", headers=headers
+                            ) as resp:
+                                logger.success(
+                                    f"Successfully purged {gpu.gpu_id=} from validator={validator_hotkey}: {await resp.json()}"
+                                )
+                    except Exception as exc:
+                        logger.error(f"Error purging GPU from validator={validator_hotkey}: {exc}")
                 await session.delete(gpu)
                 await session.commit()
         logger.info(f"Finished processing gpu_deleted event for {gpu_id=}")
@@ -460,12 +475,15 @@ class Gepetto:
         logger.info(f"Received server_deleted event {server_id=}")
         async with get_session() as session:
             server = (
-                await session.execute(select(Server).where(Server.server_id == server_id))
-            ).scalar_one_or_none()
+                (await session.execute(select(Server).where(Server.server_id == server_id)))
+                .unique()
+                .scalar_one_or_none()
+            )
             if server:
                 await asyncio.gather(
                     *[self.gpu_deleted({"gpu_id": gpu.gpu_id}) for gpu in server.gpus]
                 )
+                await session.refresh(server)
                 await session.delete(server)
                 await session.commit()
         logger.info(f"Finished processing server_deleted event for {server_id=}")

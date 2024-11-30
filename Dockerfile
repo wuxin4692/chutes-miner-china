@@ -14,9 +14,9 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 && chmod +x /usr/local/bin/dbmate
 USER chutes
 ADD --chown=chutes pyproject.toml poetry.lock /app/
-ADD --chown=chutes api /app/api
 WORKDIR /app
 RUN poetry install
+ADD --chown=chutes api /app/api
 ENV PYTHONPATH=/app
 ENTRYPOINT ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 

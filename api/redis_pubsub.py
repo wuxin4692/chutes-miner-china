@@ -3,6 +3,7 @@ Redis pubsub listener.
 """
 
 import asyncio
+import traceback
 import orjson as json
 import redis.asyncio as redis
 from datetime import datetime
@@ -90,7 +91,7 @@ class RedisListener:
                             ]
                         )
                 except Exception as exc:
-                    logger.error(f"Error processing message: {exc}")
+                    logger.error(f"Error processing message: {exc}\n{traceback.format_exc()}")
 
     async def _handle_connection_error(self, error):
         """

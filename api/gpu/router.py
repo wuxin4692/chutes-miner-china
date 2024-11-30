@@ -39,7 +39,9 @@ async def update_gpu(
             json.dumps(
                 {
                     "event_type": "gpu_added",
-                    "gpu_id": gpu_id,
+                    "event_data": {
+                        "gpu_id": gpu_id,
+                    },
                 }
             ).decode(),
         )

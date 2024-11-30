@@ -397,14 +397,10 @@ async def _advertise_nodes(validator: Validator, gpus: List[GPU]):
             }
             for idx in range(len(gpus))
         ]
-        import json
-
-        logger.info(f"POSTING:\n{json.dumps(device_infos, indent=2)}")
         headers, payload_string = sign_request(payload={"nodes": device_infos})
         async with session.post(
             f"{validator.api}/nodes/", data=payload_string, headers=headers
         ) as response:
-            logger.info(f"RESPONSE: {await response.text()}")
             assert response.status == 202
             data = await response.json()
             nodes = data.get("nodes")
