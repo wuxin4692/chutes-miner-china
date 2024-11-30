@@ -260,6 +260,11 @@ async def deploy_chute(chute: Chute, server: Server):
             template=V1PodTemplateSpec(
                 metadata=V1ObjectMeta(
                     labels=deployment_labels,
+                    annotations={
+                        "prometheus.io/scrape": "true",
+                        "prometheus.io/path": "/_metrics",
+                        "prometheus.io/port": "8000",
+                    },
                 ),
                 spec=V1PodSpec(
                     node_name=server.name,
