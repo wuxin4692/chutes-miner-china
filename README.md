@@ -15,6 +15,7 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
      - [Redis](#redis)
      - [Porter](#porter)
      - [GraVal Bootstrap](#graval-bootstrap)
+     - [Regstry Proxy](#registry-proxy)
      - [API](#api)
      - [Gepetto](#gepetto)
 - [Getting Started](#getting-started)
@@ -66,6 +67,22 @@ The TL;DR is that it uses matrix multiplications seeded by device info to verify
 All traffic sent to instances on chutes network are encrypted with keys that can only be decrypted by the GPU advertised.
 
 When you add a new node to your kubernetes cluster, each GPU on the server must be verified with the GraVal package, so a bootstrap server is deployed to accomplish this (automatically, no need to fret).
+
+Each time a chute starts/gets deployed, it also needs to run GraVal to calculate the decryption key that will be necessary for the GPU(s) the chute is deployed on.
+
+#### Registry proxy
+
+In order to keep the chute docker images somewhat private (since not all images are public), we employ a registry proxy on each miner that injects authentication via bittensor key signature.
+
+Each docker image appears to kubelet as `registry-[validator hotkey ss58].chutes.svc.cluster.local:5000/[image username]/[image name]:[image tag]`
+
+Internally, this URL resolves to the `chutes-miner-registry` service within the cluster, but some DNS magic is necessary for this routing to happen since kubelet (the thing that actually pulls images) doesn't know these internal hostnames: https://github.com/rayonlabs/chutes-miner/blob/main/ansible/templates/update-dns.sh.j2
+
+The registry proxy itself is an nginx server that performs an auth subrequest to the miner API.  See the nginx configmap: https://github.com/rayonlabs/chutes-miner/blob/main/charts/templates/registry-cm.yaml
+
+The miner API code that injects the signaturs is here: https://github.com/rayonlabs/chutes-miner/blob/main/api/registry/router.py
+
+Nginx then proxies the request upstream back to the validator in question (based on the hotkey as part of the subdomain), which validates the signatures and replaces those headers with basic auth that can be used with our self-hosted registry: https://github.com/rayonlabs/chutes-api/blob/main/api/registry/router.py
 
 #### API
 
