@@ -8,14 +8,25 @@ all:
       gpu_enabled: true
       ssh_key: "ssh-rsa AAAA... billybob@machine"
       validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
-    gpu-node-0:
+      is_primary: true
+    cpu-node-1:
       ansible_host: 1.2.3.4
       external_ip: 1.2.3.4
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true
+      ssh_key: "ssh-rsa AAAA... billybob@machine"
+      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
+      is_primary: false
+    gpu-node-0:
+      ansible_host: 2.3.4.5
+      external_ip: 2.3.4.5
+      ansible_user: ubuntu
+      user: billybob
+      gpu_enabled: true
       validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
       ssh_key: "ssh-rsa AAAA... billybob@machine"
+      is_primary: false
 
   children:
     k8s_cluster:
@@ -24,7 +35,11 @@ all:
           hosts:
             cpu-node-0:
               ansible_host: 0.1.2.3
+        secondary:
+          hosts:
+            cpu-node-1:
+              ansible_host: 1.2.3.4
         workers:
           hosts:
             gpu-node-0:
-              ansible_host: 1.2.3.4
+              ansible_host: 2.3.4.5
