@@ -116,7 +116,7 @@
           echo "$PKGS" | xargs dpkg --purge
         fi
       ignore_errors: yes
-      when: cuda_check.failed or cuda_check.changed
+      when: (gpu_enabled | bool) and (cuda_check.failed or cuda_check.changed)
 
     - name: GPU Setup Tasks
       when: enable_gpu | bool
@@ -195,6 +195,61 @@
         - /etc/pam.d/common-session
         - /etc/pam.d/common-session-noninteractive
 
+    - name: Install Wireguard
+      apt:
+        name: wireguard
+        state: present
+
+    - name: Generate Wireguard private key
+      shell: wg genkey > /etc/wireguard/private.key
+      args:
+        creates: /etc/wireguard/private.key
+
+    - name: Set private key permissions
+      file:
+        path: /etc/wireguard/private.key
+        mode: '0600'
+
+    - name: Generate public key from private key
+      shell: cat /etc/wireguard/private.key | wg pubkey > /etc/wireguard/public.key
+      args:
+        creates: /etc/wireguard/public.key
+
+    - name: Get public keys
+      slurp:
+        src: /etc/wireguard/public.key
+      register: public_keys
+
+    - name: Get private keys
+      slurp:
+        src: /etc/wireguard/private.key
+      register: private_keys
+
+    - name: Set facts for keys
+      set_fact:
+        wg_public_key: "{{ public_keys['content'] | b64decode | trim }}"
+        wg_private_key: "{{ private_keys['content'] | b64decode | trim }}"
+
+    - name: Create Wireguard config for primary
+      when: is_primary | bool
+      template:
+        src: wg0-primary.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: '0600'
+
+    - name: Create Wireguard config for worker
+      when: not is_primary | bool
+      template:
+        src: wg0-worker.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: '0600'
+
+    - name: Enable and start Wireguard
+      systemd:
+        name: wg-quick@wg0
+        enabled: yes
+        state: started
+
     - name: Install MicroK8s
       community.general.snap:
         name: microk8s
@@ -270,7 +325,7 @@
           shell: |
             helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
             helm repo update
-      when: enable_gpu | bool
+          when: enable_gpu | bool
 
     - name: Create containerd config directory
       file:
@@ -317,12 +372,14 @@
 
     - name: Enable NVidia GPU operator
       shell: microk8s enable nvidia
+      when: gpu_enabled | bool
 
     - name: Label kubernetes node
       shell: |
         microk8s kubectl label nodes {{ inventory_hostname }} chutes/external-ip={{ external_ip }} --overwrite
 
     - name: Fix NVidia cluster policy
+      when: gpu_enabled | bool
       shell: |
         sleep 15
         microk8s enable nvidia || true
