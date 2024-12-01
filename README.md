@@ -4,6 +4,27 @@ This repository contains all components related to mining on the chutes.ai permi
 
 We've tried to automate the bulk of the process via ansible, helm/kubernetes, so while it may seem like a lot, it should be fairly easy to get started.
 
+## Table of Contents
+
+- [Component Overview](#component-overview)
+   - [Provisioning/Management Tools](#provisioningmanagement-tools)
+     - [Ansible](#ansible)
+     - [Kubernetes](#kubernetes)
+   - [Miner Components](#miner-components)
+     - [Postgres](#postgres)
+     - [Redis](#redis)
+     - [Porter](#porter)
+     - [GraVal Bootstrap](#graval-bootstrap)
+     - [API](#api)
+     - [Gepetto](#gepetto)
+- [Getting Started](#getting-started)
+   - [Use Ansible to Provision Servers](#1-use-ansible-to-provision-servers)
+   - [Configure Prerequisites](#2-configure-prerequisites)
+   - [Configure Your Environment](#3-configure-your-environment)
+   - [Update Gepetto with Your Optimized Strategy](#4-update-gepetto-with-your-optimized-strategy)
+   - [Deploy the Miner within Your Kubernetes Cluster](#5-deploy-the-miner-within-your-kubernetes-cluster)
+   - [Register and Announce Your Axon](#6-register-and-announce-your-axon)
+
 ## Component Overview
 
 ### Provisioning/management tools
