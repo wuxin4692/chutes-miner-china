@@ -69,11 +69,13 @@ ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc
 
 You'll need a bare minimum of one non-GPU server responsible for running postgres, redis, gepetto, and API components (not chutes), although we'd recommend more than one, and __*ALL*__ of the GPU servers 😄
 
+[Here is a list of currently supported GPUs](https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17)
+
 Head over to the [ansible](ansible/README.md) documentation for steps on setting up your bare metal instances.  Be sure to update inventory.yml 
 
 ### 2. Configure prerequisites
 
-Once you've configured your kubernetes cluster, you can get the kubernetes configuration from the primary server (whichever server you labeled as primary in `ansible/inventory.yml`) from `/home/{username}/.kube/config`
+Once you've provisioned your nodes with ansible and have kubernetes running, you can get the kubernetes configuration from the primary server (whichever server you labeled as primary in `ansible/inventory.yml`) from `/home/{username}/.kube/config`
 
 Alternatively you can login to the primary server and run:
 ```bash
@@ -215,3 +217,37 @@ Then, you can examine the chart values to see exactly how your modifications to 
 ```bash
 kubectl apply -f miner-charts.yaml -n chutes
 ```
+
+### 6. Register and announce your axon
+
+Make sure you install `chutes-miner-cli` and `fiber` package, ideally in a separate env.
+```bash
+pip install chutes-miner-cli git+https://github.com/rayonlabs/fiber.git
+```
+
+We don't know the netuid yet, but, it will be something like:
+```bash
+btcli subnet register --netuid [CHUTES NETUID] --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY]
+```
+
+```bash
+fiber-post-ip --netuid [CHUTES NETUID] --subtensor.network finney --external_port [PORTER PORT] --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY] --external_ip [PORTER IP]
+```
+
+Once you are registered, you'll need to bootstrap each of the GPU servers you've provisioned:
+```bash
+chutes-miner add-node \
+  --name [SERVER NAME FROM inventory.yaml] \
+  --validator [VALIDATOR HOTKEY] \
+  --hourly-cost [HOURLY COST] \
+  --gpu-short-ref [GPU SHORT IDENTIFIER] \
+  --hotkey [~/.bittensor/wallets/[COLDKEY]/hotkeys/[HOTKEY] \
+  --miner-api http://[MINER API SERVER IP]:[MINER API PORT]
+```
+
+- `--name` here corresponds to the short name in your ansible inventory.yaml file, it is not the entire FQDN.
+- `--validator` is the hotkey ss58 address of the validator that this server will be allocated to
+- `--hourly-cost` is how much you are paying hourly for this server; part of the optimization strategy in gepetto is to minimize cost when selecting servers to deploy chutes on
+- `--gpu-short-ref` is a short identifier string for the type of GPU on the server, e.g. `a6000`, `l40s`, `h100_sxm`, etc.  See supported GPUs here: https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17
+- `--hotkey` is the path to the hotkey file you registered with, used to sign requests to be able to manage inventory on your system via the miner API
+- `--miner-api` is the base URL to your miner API service, which will be http://[non-GPU node IP]:[minerAPI port, default 32000]
