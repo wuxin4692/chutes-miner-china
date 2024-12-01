@@ -9,6 +9,7 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
 - [Component Overview](#component-overview)
    - [Provisioning/Management Tools](#provisioningmanagement-tools)
      - [Ansible](#ansible)
+     - [Wireguard](#wireguard)
      - [Kubernetes](#kubernetes)
    - [Miner Components](#miner-components)
      - [Postgres](#postgres)
@@ -36,6 +37,14 @@ While not strictly necessary, we *highly* encourage all miners to use our provid
 There are many nuances and requirements that are quite difficult to setup manually.
 
 *More information on using the ansible scripts in subsequent sections.*
+
+#### Wireguard
+
+Wireguard is a fast, secure VPN service that is created by ansible provisioning, which allows your nodes to communicate when they are not all on the same internal network.
+
+It is often the case that you'll want CPU instances on one provider (AWS, Google, etc.), and GPU instances on another (Latitude, Massed Compute, etc.), and you may have several providers for each due to inventory.
+
+By installing Wireguard, your kubernetes cluster can span any number of providers without issue.
 
 #### Kubernetes
 
