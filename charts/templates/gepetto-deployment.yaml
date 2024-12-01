@@ -1,0 +1,78 @@
+{{- define "redis.url" -}}
+redis://:$(REDIS_PASSWORD)@chutes-miner-redis:6379
+{{- end }}
+
+{{- define "postgresql.url" -}}
+postgresql+asyncpg://{{ .Values.postgres.database.user }}:$(POSTGRES_PASSWORD)@chutes-miner-postgres:5432/{{ .Values.postgres.database.name }}
+{{- end }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chutes-miner-gepetto
+  labels:
+    {{- include "gepetto.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "gepetto.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gepetto.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.gepetto.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gepetto.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gepetto.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.gepetto.image }}"
+          imagePullPolicy: {{ .Values.gepetto.imagePullPolicy }}
+          command: ["poetry", "run", "python", "gepetto.py"]
+          env:
+            - name: MINER_SS58
+              valueFrom:
+                secretKeyRef:
+                  name: miner-credentials
+                  key: ss58
+            - name: MINER_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: miner-credentials
+                  key: seed
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chutes-miner-redis-secret
+                  key: {{ .Values.redis.password.passwordKey }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chutes-miner-postgres-secret
+                  key: {{ .Values.postgres.database.passwordKey }}
+            - name: POSTGRESQL
+              value: {{ include "postgresql.url" . }}
+            - name: REDIS_URL
+              value: {{ include "redis.url" . }}
+            - name: VALIDATORS
+              value: {{ .Values.validators | toJson | quote }}
+          resources:
+            {{- toYaml .Values.gepetto.resources | nindent 12 }}
+          volumeMounts:
+            - name: gepetto-code
+              mountPath: /app/gepetto.py
+              subPath: gepetto.py
+      volumes:
+        - name: gepetto-code
+          configMap:
+            name: gepetto-code
