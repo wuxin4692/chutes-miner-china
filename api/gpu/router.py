@@ -24,7 +24,7 @@ async def update_gpu(
     """
     Update a GPU (really the only use case is for validators to mark them as verified).
     """
-    gpu = (await db.execute(select(GPU).where(GPU.gpu_id == gpu_id))).scalar_one_or_none()
+    gpu = (await db.execute(select(GPU).where(GPU.gpu_id == gpu_id))).unique().scalar_one_or_none()
     if gpu is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

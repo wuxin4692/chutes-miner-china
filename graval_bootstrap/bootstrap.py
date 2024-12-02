@@ -8,6 +8,7 @@ import argparse
 import uvicorn
 import asyncio
 import json
+import base64
 from pydantic import BaseModel
 from graval.miner import Miner
 from substrateinterface import Keypair, KeypairType
@@ -111,7 +112,7 @@ def main():
                 miner._init_seed = cipher.seed
             return {
                 "plaintext": miner.decrypt(
-                    bytes.fromhex(cipher.ciphertext),
+                    base64.b64decode(cipher.ciphertext.encode()),
                     bytes.fromhex(cipher.iv),
                     cipher.length,
                     cipher.device_id,
