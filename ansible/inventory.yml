@@ -3,6 +3,7 @@ all:
     cpu-node-0:
       ansible_host: 0.1.2.3
       external_ip: 0.1.2.3
+      wireguard_ip: 192.168.0.1
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true
@@ -12,6 +13,7 @@ all:
     cpu-node-1:
       ansible_host: 1.2.3.4
       external_ip: 1.2.3.4
+      wireguard_ip: 192.168.0.2
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true
@@ -21,6 +23,7 @@ all:
     gpu-node-0:
       ansible_host: 2.3.4.5
       external_ip: 2.3.4.5
+      wireguard_ip: 192.168.0.3
       ansible_user: ubuntu
       user: billybob
       gpu_enabled: true

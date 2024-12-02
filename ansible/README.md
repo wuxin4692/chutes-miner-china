@@ -78,7 +78,14 @@ If you have more than one host, you'll want to join all of the secondary nodes t
 ansible-playbook -i inventory.yml join-cluster.yml
 ```
 
-## 6. Adding a new node (carefully!)
+## 6. Enable NVidia GPU operator
+
+You need to run this one time only!
+```bash
+ansible-playbook -i inventory.yml nvidia.yaml
+```
+
+## 7. Adding a new node (carefully!)
 
 It could be very detrimental to re-run the entire playbook against all hosts, so you're best bet is to apply the playbook with `--limit new-hostname`, e.g.:
 ```bash
