@@ -5,11 +5,11 @@ hfCache:
   maxSizeGB: 500
 
 validators:
-  defaultRegistry: registry.chutes.ai:5000
+  defaultRegistry: https://registry.chutes.ai
   defaultApi: https://api.chutes.ai
   supported:
-    - hotkey: 5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4
-      registry: registry.chutes.ai:5000
+    - hotkey: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
+      registry: https://registry.chutes.ai
       api: https://api.chutes.ai
       socket: wss://ws.chutes.ai
 
