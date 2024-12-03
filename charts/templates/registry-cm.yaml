@@ -44,7 +44,7 @@ data:
                 proxy_set_header X-Chutes-Hotkey $chutes_hotkey;
                 proxy_set_header X-Chutes-Nonce $chutes_nonce;
                 proxy_set_header X-Chutes-Signature $chutes_signature;
-                proxy_pass http://$upstream_host;
+                proxy_pass https://$upstream_host;
                 proxy_set_header Host $upstream_host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

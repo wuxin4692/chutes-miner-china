@@ -1,4 +1,4 @@
-createPasswords: false  # XXX only ever set to true one time (first time)!!!
+createPasswords: true  # XXX only ever set to true one time (first time)!!!
 
 hfCache:
   maxAgeDays: 7
@@ -88,7 +88,7 @@ gepetto:
   tolerations: []
 
 postgres:
-  image: postgres:15
+  image: postgres:16
   imagePullPolicy: IfNotPresent
   persistence:
     enabled: true
@@ -156,7 +156,7 @@ redis:
     storageClass: ""
 
 registry:
-  image: nginx:1.25
+  image: nginx:1.27
   imagePullPolicy: IfNotPresent
   replicaCount: 1
   resources:
@@ -187,5 +187,5 @@ registry:
     clientMaxBodySize: "0"
     validators:
       allowedHosts:
-        - "registry.chutes.ai:5000"
-      defaultUpstream: "registry.chutes.ai:5000"
+        - "registry.chutes.ai"
+      defaultUpstream: "registry.chutes.ai"
