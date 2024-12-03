@@ -405,18 +405,6 @@
         - shell: /tmp/get_helm.sh
       when: helm_check.rc != 0
 
-    - name: Check if NVIDIA repo exists
-      shell: helm repo list | grep nvidia
-      register: nvidia_repo_check
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Add NVIDIA Helm repository
-      shell: |
-        helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
-        helm repo update
-      when: enable_gpu | bool and nvidia_repo_check.rc != 0
-
     - name: Restart Wireguard if config changed
       shell: wg-quick down wg0; wg-quick up wg0
       when: wireguard_primary.changed or wireguard_secondary.changed
@@ -466,6 +454,10 @@
         enabled: yes
         daemon_reload: yes
 
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
     - name: Reboot
       reboot:
         msg: "Rebooting..."
@@ -483,10 +475,6 @@
         timeout: 600
       when: rebooted.changed
 
-    - name: Set hostname
-      hostname:
-        name: "{{ inventory_hostname }}"
-
     - name: Wait for microk8s to be ready
       shell: microk8s status | grep -E "microk8s is running|acting as a node in a cluster"
       register: result
@@ -494,14 +482,8 @@
       retries: 30
       delay: 10
       ignore_errors: yes
-      when: reboot.changed
+      when: rebooted.changed
 
     - name: Label kubernetes node
       shell: |
         microk8s kubectl label nodes {{ inventory_hostname }} chutes/external-ip={{ external_ip }} --overwrite
-
-    - name: Configure seccomp for forge
-      template:
-        src: forge-seccomp.json.j2
-        dest: /etc/forge-seccomp.json
-        mode: '0600'

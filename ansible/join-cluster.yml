@@ -9,7 +9,7 @@
       when: not is_primary | bool
 
     - name: Get cluster join command
-      shell: microk8s add-node
+      shell: microk8s add-node --token-ttl 600
       register: join_command
       when: is_primary | bool
 
