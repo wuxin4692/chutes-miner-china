@@ -312,8 +312,6 @@
     - name: Enable MicroK8s plugins
       shell: |
         microk8s enable community
-        microk8s disable dns
-        microk8s enable dns
         microk8s enable hostpath-storage
         microk8s disable calico
         microk8s enable cilium
