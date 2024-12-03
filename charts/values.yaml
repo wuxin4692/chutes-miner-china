@@ -94,7 +94,7 @@ postgres:
     enabled: true
     accessMode: ReadWriteOnce
     size: 100Gi
-    storageClass: ""
+    storageClass: microk8s-hostpath
   resources:
     requests:
       cpu: "1"
@@ -153,7 +153,7 @@ redis:
     enabled: false
     accessMode: ReadWriteOnce
     size: 10Gi
-    storageClass: ""
+    storageClass: microk8s-hostpath
 
 registry:
   image: nginx:1.27
