@@ -64,6 +64,10 @@ minerApi:
             - key: nvidia.com/gpu.present
               operator: NotIn
               values: ["true"]
+          - key: chutes-porter
+            operator: NotIn
+            values:
+              - "true"
   tolerations: []
 
 gepetto:
@@ -79,12 +83,16 @@ gepetto:
   nodeSelector: {}
   affinity:
     nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: nvidia.com/gpu.present
-              operator: NotIn
-              values: ["true"]
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
+          - key: chutes-porter
+            operator: NotIn
+            values:
+              - "true"
   tolerations: []
 
 postgres:
@@ -119,6 +127,10 @@ postgres:
           - key: nvidia.com/gpu.present
             operator: NotIn
             values: ["true"]
+          - key: chutes-porter
+            operator: NotIn
+            values:
+              - "true"
   tolerations: []
 
 redis:
@@ -134,6 +146,10 @@ redis:
           - key: nvidia.com/gpu.present
             operator: NotIn
             values: ["true"]
+          - key: chutes-porter
+            operator: NotIn
+            values:
+              - "true"
   tolerations: []
   resources:
     requests:
@@ -178,6 +194,10 @@ registry:
           - key: nvidia.com/gpu.present
             operator: NotIn
             values: ["true"]
+          - key: chutes-porter
+            operator: NotIn
+            values:
+              - "true"
   nodeSelector: {}
   tolerations: []
   config:
