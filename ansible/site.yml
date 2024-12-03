@@ -484,7 +484,9 @@
       when: rebooted.changed
 
     - name: Double check cilium
-      shell: microk8s enable cilium || true
+      shell: |
+        microk8s enable community || true
+        microk8s enable cilium || true
       ignore_errors: yes
 
     - name: Label kubernetes node
