@@ -89,14 +89,12 @@ ansible-playbook -i inventory.yml extras.yaml
 
 ## 7. Adding a new node (carefully!)
 
-It could be very detrimental to re-run the entire playbook against all hosts, so you're best bet is to apply the playbook with `--limit new-hostname`, e.g.:
+Be very careful, and make sure you note any and all changes before re-running the playbook for all hosts.  It should work well to add a new host, but be warned.
 ```bash
-ansible-playbook -i inventory.yml site.yml --limit new-hostname
+ansible-playbook -i inventory.yml site.yml
 ```
 
-Then, manually run this on the primary kubernetes node:
+And join the node to the cluster:
 ```bash
-microk8s add-node
+ansible-playbook -i inventory.yml join-cluster.yml
 ```
-
-Then, run that join command on the new host!

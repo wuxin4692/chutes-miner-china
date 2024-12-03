@@ -30,19 +30,3 @@ all:
       validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
       ssh_key: "ssh-rsa AAAA... billybob@machine"
       is_primary: false
-
-  children:
-    k8s_cluster:
-      children:
-        primary:
-          hosts:
-            cpu-node-0:
-              ansible_host: 0.1.2.3
-        secondary:
-          hosts:
-            cpu-node-1:
-              ansible_host: 1.2.3.4
-        workers:
-          hosts:
-            gpu-node-0:
-              ansible_host: 2.3.4.5
