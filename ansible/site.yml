@@ -6,6 +6,7 @@
     ssh_public_key: "{{ ssh_key }}"
     microk8s_channel: "1.31/stable"
     enable_gpu: "{{ gpu_enabled | default(false) }}"
+    is_porter: "{{ porter | default(false) }}"
 
   tasks:
     - name: Set environment variables
@@ -461,7 +462,7 @@
         msg: "Rebooting..."
         reboot_command: "reboot"
         connect_timeout: 5
-        reboot_timeout: 600
+        reboot_timeout: 900
         pre_reboot_delay: 0
         post_reboot_delay: 30
         test_command: uptime

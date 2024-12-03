@@ -33,6 +33,7 @@
       when:
         - not is_primary | bool
         - not gpu_enabled | bool
+        - not porter | bool
         - cluster_check.rc != 0
 
 - name: Join worker nodes to cluster
@@ -42,5 +43,5 @@
       shell: "{{ hostvars['localhost']['join_command'] | replace('\n', '') }} --worker --skip-verify"
       when:
         - not is_primary | bool
-        - gpu_enabled | bool
+        - gpu_enabled | bool or porter | bool
         - cluster_check.rc != 0
