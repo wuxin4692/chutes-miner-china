@@ -78,11 +78,13 @@ If you have more than one host, you'll want to join all of the secondary nodes t
 ansible-playbook -i inventory.yml join-cluster.yml
 ```
 
-## 6. Enable NVidia GPU operator
+## 6. Install 3rd party helm charts
+
+This step will install nvidia GPU operator and prometheus on your servers.
 
 You need to run this one time only!
 ```bash
-ansible-playbook -i inventory.yml nvidia.yaml
+ansible-playbook -i inventory.yml extras.yaml
 ```
 
 ## 7. Adding a new node (carefully!)

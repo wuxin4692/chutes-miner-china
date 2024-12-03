@@ -6,6 +6,7 @@
     ssh_public_key: "{{ ssh_key }}"
     microk8s_channel: "1.31/stable"
     enable_gpu: "{{ gpu_enabled | default(false) }}"
+    primary_host: "{{ is_primary | default(false) }}"
 
   tasks:
     - name: Set environment variables
@@ -231,14 +232,14 @@
         wg_private_key: "{{ private_keys['content'] | b64decode | trim }}"
 
     - name: Create Wireguard config for primary
-      when: is_primary | bool
+      when: primary_host | bool
       template:
         src: wg0-primary.conf.j2
         dest: /etc/wireguard/wg0.conf
         mode: '0600'
 
     - name: Create Wireguard config for worker
-      when: not is_primary | bool
+      when: not primary_host | bool
       template:
         src: wg0-worker.conf.j2
         dest: /etc/wireguard/wg0.conf
@@ -397,12 +398,6 @@
     - name: Label kubernetes node
       shell: |
         microk8s kubectl label nodes {{ inventory_hostname }} chutes/external-ip={{ external_ip }} --overwrite
-
-    - name: Install prometheus
-      shell: |
-        microk8s helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-        microk8s helm repo update
-        microk8s helm install prometheus prometheus-community/prometheus --namespace chutes --create-namespace
 
     - name: Create DNS update script
       template:
