@@ -58,12 +58,12 @@ minerApi:
   nodeSelector: {}
   affinity:
     nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: nvidia.com/gpu.present
-              operator: NotIn
-              values: ["true"]
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu.present
+            operator: NotIn
+            values: ["true"]
           - key: chutes-porter
             operator: NotIn
             values:
