@@ -246,7 +246,7 @@ async def deploy_chute(chute: Chute, server: Server):
         "chutes/chute": "true",
         "chutes/chute-id": chute.chute_id,
         "chutes/version": chute.version,
-        "proxy-access": "true",
+        "squid-access": "true",
     }
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
