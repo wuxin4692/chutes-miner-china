@@ -31,13 +31,13 @@ app.kubernetes.io/name: chutes-porter
 {{- end }}
 
 {{- define "minerApi.labels" -}}
-app.kubernetes.io/name: chutes-miner-api
+app.kubernetes.io/name: api
 postgres-access: "true"
 redis-access: "true"
 {{- end }}
 
 {{- define "gepetto.labels" -}}
-app.kubernetes.io/name: chutes-miner-gepetto
+app.kubernetes.io/name: gepetto
 postgres-access: "true"
 redis-access: "true"
 {{- end }}

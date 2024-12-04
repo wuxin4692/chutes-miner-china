@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: chutes-miner-postgres
+  name: postgres
   labels:
     {{- include "postgres.labels" . | nindent 4 }}
 spec:

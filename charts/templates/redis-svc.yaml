@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: chutes-miner-redis
+  name: redis
   labels:
     {{- include "redis.labels" . | nindent 4 }}
 spec:

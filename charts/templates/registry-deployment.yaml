@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chutes-miner-registry
+  name: registry
   labels:
     {{- include "registry.labels" . | nindent 4 }}
 spec:
@@ -43,4 +43,4 @@ spec:
       volumes:
         - name: registry-nginx-config
           configMap:
-            name: chutes-miner-registry-nginx-config
+            name: registry-nginx-config

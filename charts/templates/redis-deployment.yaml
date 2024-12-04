@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chutes-miner-redis
+  name: redis
   labels:
     {{- include "redis.labels" . | nindent 4 }}
 spec:
@@ -41,7 +41,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chutes-miner-redis-secret
+                  name: redis-secret
                   key: {{ .Values.redis.password.passwordKey }}
           ports:
             - name: redis

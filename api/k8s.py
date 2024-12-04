@@ -268,6 +268,7 @@ async def deploy_chute(chute: Chute, server: Server):
                 ),
                 spec=V1PodSpec(
                     node_name=server.name,
+                    runtime_class_name="nvidia-container-runtime",
                     volumes=[
                         V1Volume(
                             name="code",

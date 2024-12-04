@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: chutes-miner-squid-np
+  name: squid-np
   labels:
     {{- include "squid.labels" . | nindent 4 }}
 spec:

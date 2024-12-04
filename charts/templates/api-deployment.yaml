@@ -1,15 +1,15 @@
 {{- define "redis.url" -}}
-redis://:$(REDIS_PASSWORD)@chutes-miner-redis:6379
+redis://:$(REDIS_PASSWORD)@redis:6379
 {{- end }}
 
 {{- define "postgresql.url" -}}
-postgresql+asyncpg://{{ .Values.postgres.database.user }}:$(POSTGRES_PASSWORD)@chutes-miner-postgres:5432/{{ .Values.postgres.database.name }}
+postgresql+asyncpg://{{ .Values.postgres.database.user }}:$(POSTGRES_PASSWORD)@postgres:5432/{{ .Values.postgres.database.name }}
 {{- end }}
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chutes-miner-api
+  name: api
   labels:
     {{- include "minerApi.labels" . | nindent 4 }}
 spec:
@@ -53,12 +53,12 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chutes-miner-redis-secret
+                  name: redis-secret
                   key: {{ .Values.redis.password.passwordKey }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chutes-miner-postgres-secret
+                  name: postgres-secret
                   key: {{ .Values.postgres.database.passwordKey }}
             - name: POSTGRESQL
               value: {{ include "postgresql.url" . }}

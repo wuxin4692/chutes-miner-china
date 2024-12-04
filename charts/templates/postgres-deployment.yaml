@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chutes-miner-postgres
+  name: postgres
   labels:
     {{- include "postgres.labels" . | nindent 4 }}
   {{- with .Values.postgres.annotations }}
@@ -44,7 +44,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chutes-miner-postgres-secret
+                  name: postgres-secret
                   key: {{ .Values.postgres.database.passwordKey }}
           ports:
             - name: postgres
@@ -61,6 +61,6 @@ spec:
       volumes:
         - name: postgres-data
           hostPath:
-            path: /var/snap/chutes-miner-postgres-data
+            path: /var/snap/postgres-data
             type: DirectoryOrCreate
       {{- end }}

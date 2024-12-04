@@ -196,6 +196,7 @@ async def deploy_graval(
                 metadata=V1ObjectMeta(labels={"app": "graval", "node": node_name}),
                 spec=V1PodSpec(
                     node_name=node_name,
+                    runtime_class_name="nvidia-container-runtime",
                     containers=[
                         V1Container(
                             name="graval",

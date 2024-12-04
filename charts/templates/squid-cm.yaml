@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: chutes-miner-squid-config
+  name: squid-config
 data:
   squid.conf: |
     http_port {{ .Values.squid.service.port }}
-    visible_hostname chutes-miner-squid
+    visible_hostname squid
     cache deny all
     cache_mem 0 MB
     cache_dir null /tmp

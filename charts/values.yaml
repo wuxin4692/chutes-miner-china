@@ -1,4 +1,4 @@
-createPasswords: true  # XXX only ever set to true one time (first time)!!!
+createPasswords: false  # XXX only ever set to true one time (first time)!!!
 
 hfCache:
   maxAgeDays: 7
@@ -22,7 +22,7 @@ porter:
   real_host: 1.2.3.4
   real_port: 32000
   image: parachutes/porter:latest
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   resources:
     requests:
       cpu: "250m"
@@ -42,7 +42,7 @@ porter:
 
 minerApi:
   image: parachutes/miner:latest
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   resources:
     requests:
       cpu: "1"
@@ -88,7 +88,7 @@ squid:
 
 gepetto:
   image: parachutes/miner:latest
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   resources:
     requests:
       cpu: "1"

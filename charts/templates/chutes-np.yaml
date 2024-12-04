@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: chutes-miner-chutes-network-policy
+  name: chutes-network-policy
   labels:
     {{- include "chutes.labels" . | nindent 4 }}
 spec:
@@ -24,7 +24,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: chutes-miner-squid
+              app.kubernetes.io/name: squid
       ports:
         - protocol: TCP
           port: 3128

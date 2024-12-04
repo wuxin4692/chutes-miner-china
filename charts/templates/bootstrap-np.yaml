@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: chutes-miner-bootstrap-network-policy
+  name: bootstrap-network-policy
   labels:
     {{- include "bootstrap.labels" . | nindent 4 }}
 spec:

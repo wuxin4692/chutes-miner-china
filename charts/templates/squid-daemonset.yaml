@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: chutes-miner-squid
+  name: squid
   labels:
     {{- include "squid.labels" . | nindent 4 }}
 spec:
@@ -37,6 +37,6 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: chutes-miner-squid-config
+            name: squid-config
         - name: cache
           emptyDir: {}
