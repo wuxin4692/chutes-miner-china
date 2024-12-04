@@ -304,22 +304,6 @@
       shell: microk8s status | grep "microk8s is running" || microk8s start
       changed_when: false
 
-    - name: Check if plugins are enabled
-      shell: microk8s status | grep -E "dns|hostpath-storage|cilium|acting as a node in a cluster"
-      register: plugins_check
-      changed_when: false
-      ignore_errors: yes
-
-    - name: Enable MicroK8s plugins
-      shell: |
-        microk8s enable community || (sleep 10 && microk8s enable community) || true
-        microk8s enable hostpath-storage ||  (sleep 10 && microk8s enable hostpath-storage) || true
-        microk8s disable calico || (sleep 10 && microk8s disable calico) || true
-        microk8s enable cilium || (sleep 10 && microk8s enable cilium) || true
-      ignore_errors: yes
-      when: plugins_check.failed
-      register: plugins_enabled
-
     - name: Configure CNI
       template:
         src: cilium.conf.j2
@@ -482,12 +466,6 @@
       delay: 10
       ignore_errors: yes
       when: rebooted.changed
-
-    - name: Double check cilium
-      shell: |
-        microk8s enable community || true
-        microk8s enable cilium || true
-      ignore_errors: yes
 
     - name: Label kubernetes node
       shell: |

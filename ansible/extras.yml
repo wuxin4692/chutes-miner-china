@@ -1,3 +1,21 @@
+- name: Enable plugins
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check if plugins are enabled
+      shell: microk8s status | grep -E "dns|hostpath-storage|cilium|acting as a node in a cluster"
+      register: plugins_check
+      changed_when: false
+      ignore_errors: yes
+    - name: Enable MicroK8s plugins
+      shell: |
+        microk8s enable community || (sleep 10 && microk8s enable community) || true
+        microk8s enable hostpath-storage ||  (sleep 10 && microk8s enable hostpath-storage) || true
+        microk8s enable cilium || (sleep 10 && microk8s enable cilium) || true
+      ignore_errors: yes
+      when: plugins_check.failed and is_primary | bool
+      register: plugins_enabled
+
 - name: Install NVidia GPU Operator
   hosts: all
   become: yes

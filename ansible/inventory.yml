@@ -1,35 +1,46 @@
 all:
+  vars:
+    # This is your SSH public key, e.g. cat ~/.ssh/id_rsa.pub
+    ssh_key: "ssh-rsa AAAA... user@hostnane"
+    # The username you want to use to login to those machines (and your public key will be added to).
+    user: billybob
+    # The initial username to login with, for fresh nodes that may not have your username setup.
+    ansible_user: ubuntu
+    # The default validator each GPU worker node will be assigned to.
+    validator: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
+    # By default, no nodes are the primary (CPU node running all the apps, wireguard, etc.) Override this flag exactly once below.
+    is_primary: false
+    # By default, no nodes are the porter node, override this flag exactly once below.
+    proter: false
+    # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
+    gpu_enabled: true
+
   hosts:
-    cpu-node-0:
-      ansible_host: 0.1.2.3
-      external_ip: 0.1.2.3
+    # This would be the main node, which runs postgres, redis, gepetto, etc.
+    chutes-miner-cpu-0:
+      ansible_host: 1.0.0.0
+      external_ip: 1.0.0.0
       wireguard_ip: 192.168.0.1
-      ansible_user: ubuntu
-      user: billybob
-      gpu_enabled: true
-      ssh_key: "ssh-rsa AAAA... billybob@machine"
-      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
+      gpu_enabled: false
       is_primary: true
-      porter: false
-    cpu-node-1:
-      ansible_host: 1.2.3.4
-      external_ip: 1.2.3.4
+
+    # This is the porter node, which should ideally be on a totally different network.
+    chutes-miner-porter-0:
+      ansible_host: 2.0.0.1
+      external_ip: 2.0.0.1
       wireguard_ip: 192.168.0.2
-      ansible_user: ubuntu
-      user: billybob
-      gpu_enabled: true
-      ssh_key: "ssh-rsa AAAA... billybob@machine"
-      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
-      is_primary: false
       porter: true
-    gpu-node-0:
-      ansible_host: 2.3.4.5
-      external_ip: 2.3.4.5
+
+    # These are the GPU nodes, which actually run the chutes.
+    chutes-miner-gpu-0:
+      ansible_host: 1.0.0.1
+      external_ip: 1.0.0.1
       wireguard_ip: 192.168.0.3
-      ansible_user: ubuntu
-      user: billybob
-      gpu_enabled: true
-      validator: "5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4"
-      ssh_key: "ssh-rsa AAAA... billybob@machine"
-      is_primary: false
-      porter: false
+    chutes-miner-gpu-1:
+      ansible_host: 1.0.0.2
+      external_ip: 1.0.0.2
+      wireguard_ip: 192.168.0.4
+    chutes-miner-gpu-2:
+      ansible_host: 1.0.0.3
+      external_ip: 1.0.0.3
+      wireguard_ip: 192.168.0.5
