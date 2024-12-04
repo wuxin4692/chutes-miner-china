@@ -340,7 +340,7 @@ async def track_server(
             / 1024
             / 1024
         )
-        - 1
+        - 2
         or 1
     )
 

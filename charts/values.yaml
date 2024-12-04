@@ -70,6 +70,22 @@ minerApi:
               - "true"
   tolerations: []
 
+
+squid:
+  image: ubuntu/squid:5.2-22.04_beta
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+  service:
+    port: 3128
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+
 gepetto:
   image: parachutes/miner:latest
   imagePullPolicy: IfNotPresent
