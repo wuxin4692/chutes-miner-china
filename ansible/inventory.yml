@@ -29,6 +29,7 @@ all:
       ansible_host: 2.0.0.1
       external_ip: 2.0.0.1
       wireguard_ip: 192.168.0.2
+      gpu_enabled: false
       porter: true
 
     # These are the GPU nodes, which actually run the chutes.

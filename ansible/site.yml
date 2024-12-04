@@ -373,21 +373,6 @@
             owner: "{{ username }}"
             group: "{{ username }}"
 
-    - name: Check if helm is installed
-      command: which helm
-      register: helm_check
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Install Helm if needed
-      block:
-        - get_url:
-            url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-            dest: /tmp/get_helm.sh
-            mode: '0700'
-        - shell: /tmp/get_helm.sh
-      when: helm_check.rc != 0
-
     - name: Restart Wireguard if config changed
       shell: wg-quick down wg0; wg-quick up wg0
       when: wireguard_primary.changed or wireguard_secondary.changed
@@ -466,7 +451,3 @@
       delay: 10
       ignore_errors: yes
       when: rebooted.changed
-
-    - name: Label kubernetes node
-      shell: |
-        microk8s kubectl label nodes {{ inventory_hostname }} chutes/external-ip={{ external_ip }} --overwrite
