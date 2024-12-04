@@ -196,17 +196,6 @@
               ln -sf $i /dev/char/$MAJ:$MIN
             done
 
-        - name: Install NVIDIA Container Toolkit
-          apt:
-            name: nvidia-container-toolkit
-            state: present
-
-        - name: Configure NVIDIA Container Toolkit
-          shell: |
-            nvidia-ctk runtime configure --runtime=docker --set-as-default
-            nvidia-ctk runtime configure --runtime=containerd --set-as-default
-            nvidia-ctk runtime configure --runtime=crio --set-as-default --config=/etc/crio/crio.conf.d/99-nvidia.conf
-
     - name: Configure file limits
       blockinfile:
         path: /etc/security/limits.conf
@@ -457,3 +446,33 @@
       delay: 10
       ignore_errors: yes
       when: rebooted.changed
+
+    - name: Install NVIDIA Container Toolkit
+      apt:
+        name: nvidia-container-toolkit
+        state: present
+
+    - name: Configure NVIDIA Container Toolkit
+      shell: |
+        nvidia-ctk runtime configure --runtime=docker --set-as-default
+        nvidia-ctk runtime configure --runtime=containerd --set-as-default
+        nvidia-ctk runtime configure --runtime=crio --set-as-default --config=/etc/crio/crio.conf.d/99-nvidia.conf
+      register: container_runtime
+      when: gpu_enabled | bool
+
+    - name: Find all microk8s services
+      shell: systemctl list-units --full --all "snap.microk8s.*" --plain --no-legend | awk '{print $1}'
+      register: microk8s_services
+
+    - name: Restart all microk8s services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ microk8s_services.stdout_lines }}"
+      when: container_runtime.changed
+
+    - name: Restart Docker service
+      systemd:
+        name: docker
+        state: restarted
+      when: container_runtime.changed
