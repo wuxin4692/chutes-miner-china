@@ -60,6 +60,7 @@ spec:
       {{- if .Values.postgres.persistence.enabled }}
       volumes:
         - name: postgres-data
-          persistentVolumeClaim:
-            claimName: chutes-miner-postgres-data
+          hostPath:
+            path: /var/snap/chutes-miner-postgres-data
+            type: DirectoryOrCreate
       {{- end }}

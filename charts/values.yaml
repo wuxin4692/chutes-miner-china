@@ -116,9 +116,6 @@ postgres:
   imagePullPolicy: IfNotPresent
   persistence:
     enabled: true
-    accessMode: ReadWriteOnce
-    size: 100Gi
-    storageClass: microk8s-hostpath
   resources:
     requests:
       cpu: "1"
@@ -140,13 +137,10 @@ postgres:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: nvidia.com/gpu.present
-            operator: NotIn
-            values: ["true"]
-          - key: chutes-porter
-            operator: NotIn
+          - key: kubernetes.io/hostname
+            operator: In
             values:
-              - "true"
+            - chutes-miner-cpu-0
   tolerations: []
 
 redis:
@@ -181,11 +175,6 @@ redis:
     passwordKey: "redis-password"
   config:
     customArgs: []
-  persistence:
-    enabled: false
-    accessMode: ReadWriteOnce
-    size: 10Gi
-    storageClass: microk8s-hostpath
 
 registry:
   image: nginx:1.27

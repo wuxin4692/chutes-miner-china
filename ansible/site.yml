@@ -311,6 +311,12 @@
         mode: '0600'
       register: cni_updated
 
+    - name: Enable cilium
+      shell: |
+        microk8s enable community || (sleep 10 && microk8s enable community) || true
+        microk8s enable cilium || (sleep 10 && microk8s enable cilium) || true
+      when: cni_updated.changed
+
     - name: Configure wireguard IP for k8s comms
       block:
         - name: Get current kubelet args
