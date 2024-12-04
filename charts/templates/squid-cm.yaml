@@ -4,8 +4,12 @@ metadata:
   name: chutes-miner-squid-config
 data:
   squid.conf: |
-    http_port 3128
+    http_port {{ .Values.squid.service.port }}
     visible_hostname chutes-miner-squid
+    cache deny all
+    cache_mem 0 MB
+    cache_dir null /tmp
+
     acl allowed_sites dstdomain "/etc/squid/allowed-sites.txt"
     acl SSL_ports port 443
     acl CONNECT method CONNECT
@@ -14,6 +18,10 @@ data:
     http_access deny all
 
   allowed-sites.txt: |
+    # Chutes.
+    .chutes.ai
+    .chutes.dev
+
     # Hugging Face domains
     .huggingface.co
     .huggingface.net

@@ -8,8 +8,8 @@ spec:
   type: ClusterIP
   ports:
     - port: {{ .Values.squid.service.port }}
-      targetPort: http
+      targetPort: {{ .Values.squid.service.port }}
       protocol: TCP
-      name: http
+      name: squid
   selector:
     {{- include "squid.labels" . | nindent 4 }}

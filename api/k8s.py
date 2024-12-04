@@ -350,6 +350,14 @@ async def deploy_chute(chute: Chute, server: Server):
                                     value="INFO",
                                 ),
                                 V1EnvVar(
+                                    name="HTTP_PROXY",
+                                    value=settings.squid_url,
+                                ),
+                                V1EnvVar(
+                                    name="HTTPS_PROXY",
+                                    value=settings.squid_url,
+                                ),
+                                V1EnvVar(
                                     name="NCCL_SOCKET_IFNAME",
                                     value="^docker,lo",
                                 ),
