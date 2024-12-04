@@ -11,7 +11,7 @@ all:
     # By default, no nodes are the primary (CPU node running all the apps, wireguard, etc.) Override this flag exactly once below.
     is_primary: false
     # By default, no nodes are the porter node, override this flag exactly once below.
-    proter: false
+    porter: false
     # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
     gpu_enabled: true
 

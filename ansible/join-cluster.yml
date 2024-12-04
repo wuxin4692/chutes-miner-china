@@ -33,7 +33,6 @@
       when:
         - not is_primary | bool
         - not gpu_enabled | bool
-        - not porter | bool
         - cluster_check.rc != 0
 
 - name: Join worker nodes to cluster
@@ -43,24 +42,22 @@
       shell: "{{ hostvars['localhost']['join_command'] | replace('\n', '') }} --worker --skip-verify"
       when:
         - not is_primary | bool
-        - gpu_enabled | bool or porter | bool
+        - gpu_enabled | bool
         - cluster_check.rc != 0
 
 - name: Label nodes with external IP
   hosts: all
   tasks:
-    - name: Label nodes with external IP
-      shell: "microk8s kubectl label nodes {{ item }} chutes/external-ip={{ hostvars[item].external_ip }} --overwrite"
-      when: 
-        - is_primary | bool
+    - name: Wait for node to be ready
+      shell: "microk8s kubectl get nodes {{ item }} --no-headers | grep -w Ready"
+      register: node_ready
+      until: node_ready.rc == 0
+      retries: 30
+      delay: 10
+      when: is_primary | bool
       loop: "{{ groups['all'] }}"
 
-- name: Label porter node
-  hosts: all
-  tasks:
-    - name: Label porter node
-      shell: "microk8s kubectl label nodes {{ item }} chutes-porter=true --overwrite"
-      when:
-        - is_primary | bool
-        - hostvars[item].porter | bool
+    - name: Label nodes with external IP
+      shell: "microk8s kubectl label nodes {{ item }} chutes/external-ip={{ hostvars[item].external_ip }} --overwrite"
+      when: is_primary | bool
       loop: "{{ groups['all'] }}"
