@@ -33,6 +33,7 @@ def add_node(
                 f"{miner_api.rstrip('/')}/servers/",
                 headers=headers,
                 data=payload_string,
+                timeout=900,
             ) as resp:
                 async for content in resp.content:
                     if content.strip():

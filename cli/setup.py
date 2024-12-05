@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="chutes-miner-cli",
-    version="0.0.1",
+    version="0.0.2",
     description="Chutes miner CLI",
     long_description="Command line interface for managing chutes miners -- add/delete nodes, etc.",
     long_description_content_type="text/markdown",
@@ -16,7 +16,7 @@ setup(
         "loguru==0.7.2",
         "pydantic>=2.9,<3",
         "setuptools>=0.75",
-        "substrate-interface>=1.7.11",
+        "substrate-interface>=1.7.10",
         "rich>=13.0.0",
         "typer>=0.12.5",
     ],
