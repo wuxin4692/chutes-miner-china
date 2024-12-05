@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     registry_proxy_port: int = int(os.getenv("REGISTRY_PROXY_PORT", "5000"))
     prometheus_url: str = f"http://prometheus-server.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('PROMETHEUS_PORT', '80')}"
-    squid_url: str = f"http://squid.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('SQUID_PORT', '3128')}"
+    squid_url: str = os.getenv("SQUID_URL", None)
 
     hf_cache_max_age_days: int = int(os.getenv("HF_CACHE_MAX_AGE_DAYS", "7"))
     hf_cache_max_size_gb: int = int(os.getenv("HF_CACHE_MAX_SIZE_GB", "500"))

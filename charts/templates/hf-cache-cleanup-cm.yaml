@@ -34,7 +34,10 @@ data:
                         break
 
     if __name__ == "__main__":
-        clean_old_cache(
-            max_age_days=int(os.getenv("HF_CACHE_MAX_AGE_DAYS", "5")),
-            max_size_gb=int(os.getenv("HF_CACHE_MAX_SIZE_GB", "100")),
-        )
+        try:
+            clean_old_cache(
+                max_age_days=int(os.getenv("HF_CACHE_MAX_AGE_DAYS", "5")),
+                max_size_gb=int(os.getenv("HF_CACHE_MAX_SIZE_GB", "100")),
+            )
+        except Exception as exc:
+            print(f"Error cleaning up cache: {exc}")

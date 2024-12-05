@@ -352,11 +352,11 @@ async def deploy_chute(chute: Chute, server: Server):
                                 ),
                                 V1EnvVar(
                                     name="HTTP_PROXY",
-                                    value=settings.squid_url,
+                                    value=settings.squid_url or "",
                                 ),
                                 V1EnvVar(
                                     name="HTTPS_PROXY",
-                                    value=settings.squid_url,
+                                    value=settings.squid_url or "",
                                 ),
                                 V1EnvVar(
                                     name="NCCL_SOCKET_IFNAME",
