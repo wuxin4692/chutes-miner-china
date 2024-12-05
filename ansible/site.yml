@@ -70,6 +70,7 @@
     - name: Install basic system prerequisites
       apt:
         name:
+          - socat
           - vim
           - jq
           - bc
@@ -399,12 +400,14 @@
         src: update-dns.sh.j2
         dest: /usr/local/bin/update-dns.sh
         mode: '0755'
+      when: is_primary | bool
 
     - name: Create systemd service
       template:
         src: update-dns.service.j2
         dest: /etc/systemd/system/update-dns.service
         mode: '0644'
+      when: is_primary | bool
 
     - name: Reload systemd
       systemd:
@@ -416,10 +419,46 @@
         state: restarted
         enabled: yes
         daemon_reload: yes
+      when: is_primary | bool
 
     - name: Set hostname
       hostname:
         name: "{{ inventory_hostname }}"
+
+    - name: Create DNS forwarder services on primary
+      template:
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+        mode: '0644'
+      with_items:
+        - dns-forwarder-tcp.service.j2
+        - dns-forwarder-udp.service.j2
+      when: is_primary | bool
+
+    - name: Configure resolved.conf for workers
+      template:
+        src: resolved.conf.j2
+        dest: /etc/systemd/resolved.conf
+        mode: '0644'
+      when: not is_primary | bool
+      register: worker_dns_config
+
+    - name: Enable and start DNS forwarders on primary
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      with_items:
+        - dns-forwarder-tcp
+        - dns-forwarder-udp
+      when: is_primary | bool
+
+    - name: Restart systemd-resolved if config changed
+      systemd:
+        name: systemd-resolved
+        state: restarted
+      when: worker_dns_config.changed
 
     - name: Reboot
       reboot:
