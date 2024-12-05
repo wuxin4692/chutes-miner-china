@@ -204,19 +204,19 @@ async def create_code_config_map(chute: Chute):
             raise
 
 
-def get_used_ports(node_name):
-    ports = set()
-    pods = k8s_core_client().list_pod_for_all_namespaces(field_selector=f'spec.nodeName={node_name}')
-    for pod in pods.items:
-        if pod.spec.host_network:
-            for container in pod.spec.containers:
-                if container.ports:
-                    for port in container.ports:
-                        if port.container_port:
-                            ports.add(port.container_port)
-                        if port.host_port:
-                            ports.add(port.host_port)
-    return sorted(list(ports))
+#def get_used_ports(node_name):
+#    ports = set()
+#    pods = k8s_core_client().list_pod_for_all_namespaces(field_selector=f'spec.nodeName={node_name}')
+#    for pod in pods.items:
+#        if pod.spec.host_network:
+#            for container in pod.spec.containers:
+#                if container.ports:
+#                    for port in container.ports:
+#                        if port.container_port:
+#                            ports.add(port.container_port)
+#                        if port.host_port:
+#                            ports.add(port.host_port)
+#    return sorted(list(ports))
 
 
 async def deploy_chute(chute: Chute, server: Server):
@@ -225,7 +225,7 @@ async def deploy_chute(chute: Chute, server: Server):
     """
 
     # Make sure the node has capacity.
-    used_ports = get_used_ports(server.name)
+    #used_ports = get_used_ports(server.name)
     gpus_allocated = 0
     available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
     for deployment in server.deployments:
@@ -266,8 +266,8 @@ async def deploy_chute(chute: Chute, server: Server):
         "squid-access": "true",
     }
 
-    while (chute_port := random.randint(8000, 16000)) in used_ports:
-        logger.warning(f"Port conflict: {chute_port}")
+    #while (chute_port := random.randint(8000, 16000)) in used_ports:
+    #    logger.warning(f"Port conflict: {chute_port}")
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"chute-{deployment_id}",
@@ -283,12 +283,11 @@ async def deploy_chute(chute: Chute, server: Server):
                     annotations={
                         "prometheus.io/scrape": "true",
                         "prometheus.io/path": "/_metrics",
-                        "prometheus.io/port": str(chute_port),
+                        "prometheus.io/port": "8000",
                     },
                 ),
                 spec=V1PodSpec(
                     node_name=server.name,
-                    host_network=True,
                     runtime_class_name="nvidia-container-runtime",
                     volumes=[
                         V1Volume(
@@ -371,14 +370,14 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="NCCL_DEBUG",
                                     value="INFO",
                                 ),
-                                #V1EnvVar(
-                                #    name="HTTP_PROXY",
-                                #    value=settings.squid_url or "",
-                                #),
-                                #V1EnvVar(
-                                #    name="HTTPS_PROXY",
-                                #    value=settings.squid_url or "",
-                                #),
+                                V1EnvVar(
+                                    name="HTTP_PROXY",
+                                    value=settings.squid_url or "",
+                                ),
+                                V1EnvVar(
+                                    name="HTTPS_PROXY",
+                                    value=settings.squid_url or "",
+                                ),
                                 V1EnvVar(
                                     name="NCCL_SOCKET_IFNAME",
                                     value="^docker,lo",
@@ -437,7 +436,7 @@ async def deploy_chute(chute: Chute, server: Server):
                                 "run",
                                 chute.ref_str,
                                 "--port",
-                                str(chute_port),
+                                "8000",
                                 "--graval-seed",
                                 str(server.seed),
                                 "--miner-ss58",
@@ -445,9 +444,9 @@ async def deploy_chute(chute: Chute, server: Server):
                                 "--validator-ss58",
                                 server.validator,
                             ],
-                            ports=[{"containerPort": chute_port}],
+                            ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
-                                http_get=V1HTTPGetAction(path="/_alive", port=chute_port),
+                                http_get=V1HTTPGetAction(path="/_alive", port=8000),
                                 initial_delay_seconds=45,
                                 period_seconds=10,
                                 timeout_seconds=1,
@@ -478,7 +477,7 @@ async def deploy_chute(chute: Chute, server: Server):
             selector={
                 "chutes/deployment-id": deployment_id,
             },
-            ports=[V1ServicePort(port=chute_port, target_port=chute_port, protocol="TCP")],
+            ports=[V1ServicePort(port=8000, target_port=8000, protocol="TCP")],
         ),
     )
 
