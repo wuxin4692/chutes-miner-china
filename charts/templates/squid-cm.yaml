@@ -31,7 +31,6 @@ data:
     # Model and Dataset Repositories
     .civitai.com
     .modelscope.cn
-    .replicate.com
     .weights.ggmlv3.model
     .weights.gguf.model
     .pytorch.org
@@ -58,6 +57,7 @@ data:
     .cloudflare.com
     .jsdelivr.net
     .unpkg.com
+    .bunny.net
     .cdn.jsdelivr.net
     .cdnjs.cloudflare.com
     .googleusercontent.com
