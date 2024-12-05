@@ -371,14 +371,14 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="NCCL_DEBUG",
                                     value="INFO",
                                 ),
-                                V1EnvVar(
-                                    name="HTTP_PROXY",
-                                    value=settings.squid_url or "",
-                                ),
-                                V1EnvVar(
-                                    name="HTTPS_PROXY",
-                                    value=settings.squid_url or "",
-                                ),
+                                #V1EnvVar(
+                                #    name="HTTP_PROXY",
+                                #    value=settings.squid_url or "",
+                                #),
+                                #V1EnvVar(
+                                #    name="HTTPS_PROXY",
+                                #    value=settings.squid_url or "",
+                                #),
                                 V1EnvVar(
                                     name="NCCL_SOCKET_IFNAME",
                                     value="^docker,lo",
@@ -478,7 +478,7 @@ async def deploy_chute(chute: Chute, server: Server):
             selector={
                 "chutes/deployment-id": deployment_id,
             },
-            ports=[V1ServicePort(port=8000, target_port=8000, protocol="TCP")],
+            ports=[V1ServicePort(port=chute_port, target_port=chute_port, protocol="TCP")],
         ),
     )
 
