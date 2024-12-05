@@ -50,23 +50,23 @@ def main():
         signature = request.headers.get("X-Chutes-Signature")
         if (
             any(not v for v in [miner_hotkey, validator_hotkey, nonce, signature])
-            or validator_hotkey not in args.validator_whitelist.split(",")
             or miner_hotkey != args.hotkey
+            or validator_hotkey not in args.validator_whitelist.split(",")
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away {miner_hotkey=} {validator_hotkey=} {args.validator_whitelist=} {nonce=} {signature=}")
         signature_string = ":".join(
             [
                 miner_hotkey,
                 validator_hotkey,
                 nonce,
-                "porter",
+                extra_key,
             ]
         )
         if not Keypair(ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519).verify(
             signature_string, bytes.fromhex(signature)
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"go away -- bad signature: {signature_string} -- {validator_hotkey=}")
         return {
             "host": args.real_host,
             "port": args.real_port,

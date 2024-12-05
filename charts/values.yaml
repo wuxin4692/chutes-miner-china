@@ -8,7 +8,7 @@ validators:
   defaultRegistry: https://registry.chutes.ai
   defaultApi: https://api.chutes.ai
   supported:
-    - hotkey: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
+    - hotkey: 5Dt7HZ7Zpw4DppPxFM7Ke3Cm7sDAWhsZXmM5ZAmE7dSVJbcQ
       registry: https://registry.chutes.ai
       api: https://api.chutes.ai
       socket: wss://ws.chutes.ai
