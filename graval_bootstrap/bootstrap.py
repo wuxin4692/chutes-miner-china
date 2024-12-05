@@ -68,7 +68,10 @@ def main():
             or validator_hotkey not in whitelist
             or int(time.time()) - int(nonce) >= 30
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="go away {miner_hotkey=} {validator_hotkey=} {whitelist=} {nonce=} {signature=}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="go away {miner_hotkey=} {validator_hotkey=} {whitelist=} {nonce=} {signature=}",
+            )
         signature_string = ":".join(
             [
                 miner_hotkey,
@@ -80,7 +83,10 @@ def main():
         if not Keypair(ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519).verify(
             signature_string, bytes.fromhex(signature)
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"go away -- bad signature: {signature_string} -- {validator_hotkey=}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"go away -- bad signature: {signature_string} -- {validator_hotkey=}",
+            )
 
     @app.get("/ping", response_class=PlainTextResponse)
     async def ping():

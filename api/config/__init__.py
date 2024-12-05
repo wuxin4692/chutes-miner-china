@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     graval_bootstrap_image: str = os.getenv(
         "GRAVAL_BOOTSTRAP_IMAGE", "parachutes/graval-bootstrap:latest"
     )
-    graval_bootstrap_timeout: int = int(os.getenv("GRAVAL_BOOTSTRAP_TIMEOUT", "300"))
+    graval_bootstrap_timeout: int = int(os.getenv("GRAVAL_BOOTSTRAP_TIMEOUT", "900"))
     miner_ss58: str = os.environ["MINER_SS58"]
     miner_keypair: Keypair = Keypair.create_from_seed(os.environ["MINER_SEED"])
     validators_json: str = os.environ["VALIDATORS"]
