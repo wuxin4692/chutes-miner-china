@@ -43,27 +43,51 @@ ansible-galaxy collection install kubernetes.core
 
 ## 3. Update inventory configuration
 
-Using your favorite text editor (vim of course), edit inventory.yml to include your servers.
+Using your favorite text editor (vim of course), edit inventory.yml to suite your needs.
 
 For example:
 ```yaml
-all:
-  hosts:
-    chutes-dev-1:
-      ansible_host: 1.2.3.4
-      ansible_user: ubuntu
-      user: billybob
-      gpu_enabled: true
-      ssh_key: "ssh-rsa AAAA... billybob@machine"
-```
 
-In this case:
-- `chutes-dev-1` is the hostname
-- `1.2.3.4` is the IP address of the server
-- `ubuntu` is the *initial* username, i.e. when the node is provisioned for you by your server provider, the initial login username
-- `billybob` is the user you'd like to create and login as
-- `gpu_enabled` indicates whether this is a GPU node or not (database, API, etc. services should likely run on non-GPU nodes)
-- `ssh_key` is the public key, e.g. contents of `~/.ssh/id_rsa.pub`
+all:
+  vars:
+    # This is your SSH public key, e.g. cat ~/.ssh/id_rsa.pub
+    ssh_key: "ssh-rsa AAAA... user@hostnane"
+    # The username you want to use to login to those machines (and your public key will be added to).
+    user: billybob
+    # The initial username to login with, for fresh nodes that may not have your username setup.
+    ansible_user: ubuntu
+    # The default validator each GPU worker node will be assigned to.
+    validator: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
+    # By default, no nodes are the primary (CPU node running all the apps, wireguard, etc.) Override this flag exactly once below.
+    is_primary: false
+    # By default, no nodes are the porter node, override this flag exactly once below.
+    porter: false
+    # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
+    gpu_enabled: true
+
+  hosts:
+    # This would be the main node, which runs postgres, redis, gepetto, etc.
+    chutes-miner-cpu-0:
+      ansible_host: 1.0.0.0
+      external_ip: 1.0.0.0
+      wireguard_ip: 192.168.0.1
+      gpu_enabled: false
+      is_primary: true
+
+    # This is the porter node, which should ideally be on a totally different network.
+    chutes-miner-porter-0:
+      ansible_host: 2.0.0.1
+      external_ip: 2.0.0.1
+      wireguard_ip: 192.168.0.2
+      gpu_enabled: false
+      porter: true
+
+    # These are the GPU nodes, which actually run the chutes.
+    chutes-miner-gpu-0:
+      ansible_host: 1.0.0.1
+      external_ip: 1.0.0.1
+      wireguard_ip: 192.168.0.3
+```
 
 ## 4. Bootstrap!
 
@@ -87,7 +111,7 @@ You need to run this one time only!
 ansible-playbook -i inventory.yml extras.yaml
 ```
 
-## 7. Adding a new node (carefully!)
+## To add a new node, after the fact
 
 Be very careful, and make sure you note any and all changes before re-running the playbook for all hosts.  It should work well to add a new host, but be warned.
 ```bash
