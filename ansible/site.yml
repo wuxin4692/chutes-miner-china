@@ -454,11 +454,10 @@
         - dns-forwarder-udp
       when: is_primary | bool
 
-    - name: Restart systemd-resolved if config changed
+    - name: Restart systemd-resolved
       systemd:
         name: systemd-resolved
         state: restarted
-      when: worker_dns_config.changed
 
     - name: Reboot
       reboot:
