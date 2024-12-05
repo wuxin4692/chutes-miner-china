@@ -6,7 +6,7 @@ import os
 import json
 import redis.asyncio as redis
 from functools import lru_cache
-from typing import Any, List
+from typing import Any, List, Optional
 from pydantic import BaseModel
 from substrateinterface import Keypair
 from pydantic_settings import BaseSettings
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     registry_proxy_port: int = int(os.getenv("REGISTRY_PROXY_PORT", "5000"))
     prometheus_url: str = f"http://prometheus-server.{os.getenv('CHUTES_NAMESPACE', 'chutes')}.svc.cluster.local:{os.getenv('PROMETHEUS_PORT', '80')}"
-    squid_url: str = os.getenv("SQUID_URL", None)
+    squid_url: Optional[str] = os.getenv("SQUID_URL", None)
 
     hf_cache_max_age_days: int = int(os.getenv("HF_CACHE_MAX_AGE_DAYS", "7"))
     hf_cache_max_size_gb: int = int(os.getenv("HF_CACHE_MAX_SIZE_GB", "500"))
