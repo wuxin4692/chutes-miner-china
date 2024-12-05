@@ -73,7 +73,7 @@ ansible-playbook -i inventory.yml site.yml
 
 ## 5. Join the kubernetes nodes together
 
-If you have more than one host, you'll want to join all of the secondary nodes to the primary.
+If you have more than one host, make sure they are all part of the same cluster:
 ```bash
 ansible-playbook -i inventory.yml join-cluster.yml
 ```
