@@ -268,6 +268,7 @@ async def deploy_chute(chute: Chute, server: Server):
                 ),
                 spec=V1PodSpec(
                     node_name=server.name,
+                    host_network=True,
                     runtime_class_name="nvidia-container-runtime",
                     volumes=[
                         V1Volume(
@@ -453,6 +454,7 @@ async def deploy_chute(chute: Chute, server: Server):
         ),
         spec=V1ServiceSpec(
             type="NodePort",
+            external_traffic_policy="Local",
             selector={
                 "chutes/deployment-id": deployment_id,
             },
