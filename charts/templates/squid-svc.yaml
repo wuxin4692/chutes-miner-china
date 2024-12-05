@@ -6,6 +6,7 @@ metadata:
     {{- include "squid.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  internalTrafficPolicy: Local
   ports:
     - port: {{ .Values.squid.service.port }}
       targetPort: {{ .Values.squid.service.port }}

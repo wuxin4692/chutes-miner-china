@@ -34,7 +34,7 @@ spec:
           env:
             - name: REAL_AXON_HOST
               value: {{ .Values.porter.real_host }}
-            - name: REAL_AXON_IP
+            - name: REAL_AXON_PORT
               value: "{{ .Values.porter.real_port }}"
             - name: MINER_HOTKEY_SS58
               valueFrom:

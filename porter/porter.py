@@ -19,7 +19,7 @@ def main():
     )
     parser.add_argument(
         "--real-port",
-        type=str,
+        type=int,
         required=True,
         help="real axon port",
     )
@@ -60,7 +60,7 @@ def main():
                 miner_hotkey,
                 validator_hotkey,
                 nonce,
-                extra_key,
+                "porter",
             ]
         )
         if not Keypair(ss58_address=validator_hotkey, crypto_type=KeypairType.SR25519).verify(
