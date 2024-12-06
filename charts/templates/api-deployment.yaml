@@ -68,6 +68,8 @@ spec:
               value: "{{ .Values.squid.service.port }}"
             - name: VALIDATORS
               value: {{ .Values.validators | toJson | quote }}
+            - name: REGISTRY_PROXY_PORT
+              values: "{{ .Values.registry.service.nodePort }}"
           ports:
             - name: http
               containerPort: {{ .Values.minerApi.service.targetPort }}

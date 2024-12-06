@@ -83,9 +83,9 @@ Each time a chute starts/gets deployed, it also needs to run GraVal to calculate
 
 In order to keep the chute docker images somewhat private (since not all images are public), we employ a registry proxy on each miner that injects authentication via bittensor key signature.
 
-Each docker image appears to kubelet as `registry-[validator hotkey ss58].chutes.svc.cluster.local:5000/[image username]/[image name]:[image tag]`
+Each docker image appears to kubelet as `[validator hotkey ss58].localregistry.chutes.ai:30500/[image username]/[image name]:[image tag]`
 
-Internally, this URL resolves to the `chutes-miner-registry` service within the cluster, but some DNS magic is necessary for this routing to happen since kubelet (the thing that actually pulls images) doesn't know these internal hostnames: https://github.com/rayonlabs/chutes-miner/blob/main/ansible/templates/update-dns.sh.j2
+This subdomain points to 127.0.0.1 so it always loads from the registry service proxy on each GPU server via NodePort routing and local first k8s service traffic policy.
 
 The registry proxy itself is an nginx server that performs an auth subrequest to the miner API.  See the nginx configmap: https://github.com/rayonlabs/chutes-miner/blob/main/charts/templates/registry-cm.yaml
 
@@ -155,19 +155,17 @@ Due to the extreme complexity and high expense of operating a validator on this 
 
 To that end, any validators you wish to support MUST be configured in the top-level validators section:
 
-The dev/testnet configuration is as follows:
+The mainnet configuration is expected to be:
 ```yaml
 validators:
-  defaultRegistry: registry.chutes.dev:5000
-  defaultApi: https://api.chutes.dev
+  defaultRegistry: registry.chutes.ai
+  defaultApi: https://api.chutes.ai
   supported:
-    - hotkey: 5DCJTfVx3ReNyxW3SgQEKFgvXFuqnK3BNW1vMhTQK4jdZbV4
-      registry: registry.chutes.dev:5000
-      api: https://api.chutes.dev
-      socket: ws://ws.chutes.dev:8080
+    - hotkey: 5Dt7HZ7Zpw4DppPxFM7Ke3Cm7sDAWhsZXmM5ZAmE7dSVJbcQ
+      registry: registry.chutes.ai
+      api: https://api.chutes.ai
+      socket: wss://ws.chutes.ai
 ```
-
-The mainnet configuration is TBD, but in any case you'll need to explicitly enumerate the validators that are supported by your miner, in the `supported` section.
 
 #### b. huggingface model cache
 

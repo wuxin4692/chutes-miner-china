@@ -1,7 +1,0 @@
-[Resolve]
-DNS={{ groups['all'] | map('extract', hostvars) | selectattr('is_primary', 'equalto', true) | map(attribute='wireguard_ip') | first }}
-Domains=~chutes.svc.cluster.local
-FallbackDNS=1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4
-DNSSEC=no
-DNSOverTLS=no
-DNS6=no

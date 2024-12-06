@@ -7,11 +7,14 @@ metadata:
   labels:
     {{- include "registry.labels" $root | nindent 4 }}
 spec:
-  type: {{ $root.Values.registry.service.type }}
+  type: NodePort
+  internalTrafficPolicy: Local
+  externalTrafficPolicy: Local
   ports:
     - port: {{ $root.Values.registry.service.port }}
       targetPort: {{ $root.Values.registry.service.targetPort }}
       protocol: TCP
+      nodePort: {{ $root.Values.registry.service.nodePort }}
       name: http
   selector:
     {{- include "registry.labels" $root | nindent 4 }}

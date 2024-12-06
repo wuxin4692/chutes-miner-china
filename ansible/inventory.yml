@@ -14,6 +14,8 @@ all:
     porter: false
     # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
     gpu_enabled: true
+    # The port you'll be using for the registry proxy, MUST MATCH chart/values.yaml registry.service.nodePort!
+    registry_port: 30500
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.
