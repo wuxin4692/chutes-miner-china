@@ -50,6 +50,8 @@ class Gepetto:
         self.pubsub.on_event("chute_created")(self.chute_created)
         self.pubsub.on_event("chute_updated")(self.chute_updated)
         self.pubsub.on_event("bounty_change")(self.bounty_changed)
+        self.pubsub.on_event("image_deleted")(self.image_deleted)
+        self.pubsub.on_event("image_created")(self.image_created)
 
     async def run(self):
         """
@@ -534,6 +536,20 @@ class Gepetto:
                 await session.delete(server)
                 await session.commit()
         logger.info(f"Finished processing server_deleted event for {server_id=}")
+
+    async def image_deleted(self, event_data: Dict[str, Any]):
+        """
+        An image was deleted (should clean up maybe?)
+        """
+        logger.info(f"Image deleted, but I'm lazy and will let k8s clean up: {event_data}")
+
+    async def image_created(self, event_data: Dict[str, Any]):
+        """
+        An image was created, we could be extra eager and pull the image onto each GPU node so it's hot faster.
+        """
+        logger.info(
+            f"Image created, but I'm going to lazy load the image when chutes are created: {event_data}"
+        )
 
     async def chute_deleted(self, event_data: Dict[str, Any]):
         """

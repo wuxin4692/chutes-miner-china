@@ -64,7 +64,14 @@ class SocketClient:
             """
             logger.info(f"Received broadcast to miners: {data}")
             reason = data.get("reason")
-            if reason not in ("chute_deleted", "chute_updated", "chute_created", "bounty_change"):
+            if reason not in (
+                "chute_deleted",
+                "chute_updated",
+                "chute_created",
+                "bounty_change",
+                "image_created",
+                "image_deleted",
+            ):
                 logger.warning(f"Ignoring invalid broadcast: {data}")
                 return
             data["data"].update({"validator": self.validator})
