@@ -58,7 +58,7 @@ class Gepetto:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         await self.reconsile()
-        asyncio.create_task(self.announcer())
+        asyncio.create_task(self.activator())
         asyncio.create_task(self.autoscaler())
         await self.pubsub.start()
 
@@ -154,7 +154,7 @@ class Gepetto:
 
     async def announce_deployment(self, deployment: Deployment):
         """
-        Tell a validator that our deployment is available.
+        Tell a validator that we're creating a deployment.
         """
         if (vali := validator_by_hotkey(deployment.validator)) is None:
             logger.warning(f"No validator for deployment: {deployment.deployment_id}")
@@ -191,14 +191,55 @@ class Gepetto:
                         await session.commit()
                 logger.success(f"Successfully advertised instance: {instance['instance_id']}")
 
-    async def announcer(self):
+    async def activate(self, deployment: Deployment):
         """
-        Loop to ensure we announce all deployments, when they are ready.
+        Tell a validator that a deployment is active/ready.
+        """
+        if (vali := validator_by_hotkey(deployment.validator)) is None:
+            logger.warning(f"No validator for deployment: {deployment.deployment_id}")
+            return
+        body = {"active": True}
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, payload_string = sign_request(payload=body)
+            async with session.post(
+                f"{vali.api}/instances/{deployment.chute_id}/{deployment.instance_id}",
+                headers=headers,
+                data=payload_string,
+            ) as resp:
+                data = await resp.json()
+                async with get_session() as session:
+                    deployment = (
+                        (
+                            await session.execute(
+                                select(Deployment).where(
+                                    Deployment.deployment_id == deployment.deployment_id
+                                )
+                            )
+                        )
+                        .unique()
+                        .scalar_one_or_none()
+                    )
+                    if deployment:
+                        deployment.active = True
+                        if data.get("verified"):
+                            deployment.verified = True
+                        await session.commit()
+                logger.success(
+                    f"Successfully activated {deployment.instance_id=}: {await resp.json()}"
+                )
+
+    async def activator(self):
+        """
+        Loop to mark all deployments ready in the validator when they are ready in k8s.
         """
         while True:
             try:
                 query = select(Deployment).where(
-                    Deployment.instance_id.is_(None), Deployment.stub.is_(False)
+                    or_(
+                        Deployment.active.is_(False),
+                        Deployment.verified.is_(False),
+                    ),
+                    Deployment.stub.is_(False),
                 )
                 async with get_session() as session:
                     deployments = (await session.execute(query)).unique().scalars()
@@ -211,9 +252,8 @@ class Gepetto:
                     k8s_deployment = await k8s.get_deployment(deployment.deployment_id)
                     if not k8s_deployment:
                         logger.warning("NO K8s!")
-
                     if k8s_deployment.get("ready"):
-                        await self.announce_deployment(deployment)
+                        await self.activate(deployment)
             except Exception as exc:
                 logger.error(f"Error performing announcement loop: {exc}")
                 await asyncio.sleep(5)
@@ -879,6 +919,7 @@ class Gepetto:
                             logger.success(
                                 f"Successfully deployed {chute.chute_id=} on {server.server_id=}: {deployment.deployment_id=}"
                             )
+                            await self.announce_deployment(deployment)
                         except DeploymentFailure as exc:
                             logger.error(
                                 f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"

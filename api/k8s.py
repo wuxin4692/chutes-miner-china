@@ -4,7 +4,6 @@ Helper for kubernetes interactions.
 
 import math
 import uuid
-import random
 import traceback
 from loguru import logger
 from typing import List, Dict, Any
@@ -204,7 +203,7 @@ async def create_code_config_map(chute: Chute):
             raise
 
 
-#def get_used_ports(node_name):
+# def get_used_ports(node_name):
 #    ports = set()
 #    pods = k8s_core_client().list_pod_for_all_namespaces(field_selector=f'spec.nodeName={node_name}')
 #    for pod in pods.items:
@@ -225,7 +224,7 @@ async def deploy_chute(chute: Chute, server: Server):
     """
 
     # Make sure the node has capacity.
-    #used_ports = get_used_ports(server.name)
+    # used_ports = get_used_ports(server.name)
     gpus_allocated = 0
     available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
     for deployment in server.deployments:
@@ -266,7 +265,7 @@ async def deploy_chute(chute: Chute, server: Server):
         "squid-access": "true",
     }
 
-    #while (chute_port := random.randint(8000, 16000)) in used_ports:
+    # while (chute_port := random.randint(8000, 16000)) in used_ports:
     #    logger.warning(f"Port conflict: {chute_port}")
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
