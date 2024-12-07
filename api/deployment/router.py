@@ -36,4 +36,4 @@ async def update_deployment(
     deployment.verified = verification_args.verified
     await db.commit()
     await db.refresh(deployment)
-    return deployment
+    return {"ok": True}

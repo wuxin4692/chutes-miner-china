@@ -446,11 +446,11 @@ async def deploy_chute(chute: Chute, server: Server):
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
                                 http_get=V1HTTPGetAction(path="/_alive", port=8000),
-                                initial_delay_seconds=45,
+                                initial_delay_seconds=15,
                                 period_seconds=10,
                                 timeout_seconds=1,
                                 success_threshold=1,
-                                failure_threshold=3,
+                                failure_threshold=5,
                             ),
                         )
                     ],

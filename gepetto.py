@@ -203,7 +203,7 @@ class Gepetto:
         body = {"active": True}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, payload_string = sign_request(payload=body)
-            async with session.post(
+            async with session.patch(
                 f"{vali.api}/instances/{deployment.chute_id}/{deployment.instance_id}",
                 headers=headers,
                 data=payload_string,
@@ -226,9 +226,7 @@ class Gepetto:
                         if data.get("verified"):
                             deployment.verified = True
                         await session.commit()
-                logger.success(
-                    f"Successfully activated {deployment.instance_id=}: {await resp.json()}"
-                )
+                logger.success(f"Successfully activated {deployment.instance_id=}")
 
     async def activator(self):
         """
@@ -256,6 +254,7 @@ class Gepetto:
                         logger.warning("NO K8s!")
                     if k8s_deployment.get("ready"):
                         await self.activate(deployment)
+                await asyncio.sleep(5)
             except Exception as exc:
                 logger.error(f"Error performing announcement loop: {exc}")
                 await asyncio.sleep(5)
