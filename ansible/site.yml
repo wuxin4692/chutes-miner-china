@@ -429,6 +429,7 @@
       apt:
         name: nvidia-container-toolkit
         state: present
+      when: gpu_enabled | bool
 
     - name: Configure NVIDIA Container Toolkit
       shell: |
@@ -454,3 +455,8 @@
         name: docker
         state: restarted
       when: container_runtime.changed
+
+    - name: Patch Cilium ConfigMap to allow NodePort on loopback
+      shell: |
+        microk8s kubectl patch configmap cilium-config -n kube-system --type merge -p '{"data":{"node-port-bind-protection":"false"}}'
+      when: is_primary | bool

@@ -1,4 +1,4 @@
-server = "http://{{ registry_hostname }}:5000"
+server = "http://{{ registry_hostname }}:{{ registry_port }}"
 
-[host."http://{{ registry_hostname }}:5000"]
+[host."http://{{ registry_hostname }}:{{ registry_port }}"]
 capabilities = ["pull", "resolve"]
