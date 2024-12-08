@@ -16,6 +16,8 @@ all:
     gpu_enabled: true
     # The port you'll be using for the registry proxy, MUST MATCH chart/values.yaml registry.service.nodePort!
     registry_port: 30500
+    # SSH sometimes just hangs without this...
+    ansible_ssh_common_args: '-o ControlPath=none'
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.
