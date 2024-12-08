@@ -533,8 +533,8 @@ async def kick_cilium(node_name: str):
     Restart cilium on a node.  This is really obnoxious, need to debug...
     """
     pod_list = k8s_core_client().list_namespaced_pod(
-        namespace=settings.namespace,
-        label_selector=f"name=cilium",
+        namespace="kube-system",
+        label_selector=f"k8s-app=cilium",
     )
     target_pod = None
     for pod in pod_list.items:
@@ -545,6 +545,6 @@ async def kick_cilium(node_name: str):
         return
     k8s_core_client().delete_namespaced_pod(
         name=target_pod.metadata.name,
-        namespace=settings.namespace,
+        namespace="kube-system",
         body=V1DeleteOptions()
     )
