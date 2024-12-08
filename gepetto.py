@@ -930,6 +930,7 @@ class Gepetto:
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
                         )
                         try:
+                            await k8s.kick_cilium(server.name)
                             deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
                             logger.success(
                                 f"Successfully deployed {chute.chute_id=} on {server.server_id=}: {deployment.deployment_id=}"
