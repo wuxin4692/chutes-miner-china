@@ -460,3 +460,43 @@
       shell: |
         microk8s kubectl patch configmap cilium-config -n kube-system --type merge -p '{"data":{"node-port-bind-protection":"false"}}'
       when: is_primary | bool
+
+    - name: Install iptables-persistent
+      package:
+        name:
+          - iptables-persistent
+          - netfilter-persistent
+        state: present
+      when: is_primary | bool
+
+    - name: Add forwarding rule
+      iptables:
+        chain: FORWARD
+        in_interface: wg0
+        jump: ACCEPT
+        state: present
+      when: is_primary | bool
+
+    - name: Add NAT masquerade rule
+      iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: eth0
+        jump: MASQUERADE
+        state: present
+      when: is_primary | bool
+
+    - name: Save iptables rules
+      shell: |
+        netfilter-persistent save
+        netfilter-persistent reload
+      when: is_primary | bool
+
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        sysctl_set: yes
+        reload: yes
+      when: is_primary | bool
