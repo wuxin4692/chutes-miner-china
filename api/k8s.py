@@ -266,8 +266,6 @@ async def deploy_chute(chute: Chute, server: Server):
         "squid-access": "true",
     }
 
-    # while (chute_port := random.randint(8000, 16000)) in used_ports:
-    #    logger.warning(f"Port conflict: {chute_port}")
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"chute-{deployment_id}",
@@ -297,15 +295,15 @@ async def deploy_chute(chute: Chute, server: Server):
                             ),
                         ),
                         V1Volume(
-                            name="hf-cache",
+                            name="cache",
                             host_path=V1HostPathVolumeSource(
-                                path="/var/lib/hf-cache", type="DirectoryOrCreate"
+                                path="/var/lib/cache", type="DirectoryOrCreate"
                             ),
                         ),
                         V1Volume(
-                            name="hf-cache-cleanup",
+                            name="cache-cleanup",
                             config_map=V1ConfigMapVolumeSource(
-                                name="chutes-hf-cache-cleaner",
+                                name="chutes-cache-cleaner",
                             ),
                         ),
                         V1Volume(
@@ -320,29 +318,33 @@ async def deploy_chute(chute: Chute, server: Server):
                     init_containers=[
                         V1Container(
                             name="cache-init",
-                            image="parachutes/hf-cache-cleaner:latest",
+                            image="parachutes/cache-cleaner:latest",
                             command=["/bin/bash", "-c"],
                             args=[
-                                "mkdir -p /hf-cache && chmod -R 777 /hf-cache && python /scripts/hf_cache_cleanup.py"
+                                "mkdir -p /cache/huggingface /cache/civitai && chmod -R 777 /cache && python /scripts/cache_cleanup.py"
                             ],
                             env=[
                                 V1EnvVar(
                                     name="HF_HOME",
-                                    value="/hf-cache",
+                                    value="/cache/huggingface",
+                                ),
+                                V1EnvVar(
+                                    name="CIVITAI_HOME",
+                                    value="/cache/civitai",
                                 ),
                                 V1EnvVar(
                                     name="HF_CACHE_MAX_AGE_DAYS",
-                                    value=str(settings.hf_cache_max_age_days),
+                                    value=str(settings.cache_max_age_days),
                                 ),
                                 V1EnvVar(
                                     name="HF_CACHE_MAX_SIZE_GB",
-                                    value=str(settings.hf_cache_max_size_gb),
+                                    value=str(settings.cache_max_size_gb),
                                 ),
                             ],
                             volume_mounts=[
-                                V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
+                                V1VolumeMount(name="cache", mount_path="/cache"),
                                 V1VolumeMount(
-                                    name="hf-cache-cleanup",
+                                    name="cache-cleanup",
                                     mount_path="/scripts",
                                 ),
                             ],
@@ -402,7 +404,8 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="CUDA_VISIBLE_DEVICES",
                                     value=",".join([str(idx) for idx in range(chute.gpu_count)]),
                                 ),
-                                V1EnvVar(name="HF_HOME", value="/hf-cache"),
+                                V1EnvVar(name="HF_HOME", value="/cache/huggingface"),
+                                V1EnvVar(name="CIVITAI_HOME", value="/cache/civitai"),
                             ],
                             resources=V1ResourceRequirements(
                                 requests={
@@ -422,7 +425,7 @@ async def deploy_chute(chute: Chute, server: Server):
                                     mount_path=f"/app/{chute.filename}",
                                     sub_path=chute.filename,
                                 ),
-                                V1VolumeMount(name="hf-cache", mount_path="/hf-cache"),
+                                V1VolumeMount(name="cache", mount_path="/cache"),
                                 V1VolumeMount(name="tmp", mount_path="/tmp"),
                                 V1VolumeMount(name="shm", mount_path="/dev/shm"),
                             ],

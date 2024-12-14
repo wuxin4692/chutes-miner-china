@@ -14,10 +14,6 @@ app.kubernetes.io/name: chutes-redis
 app.kubernetes.io/name: chutes-registry
 {{- end }}
 
-{{- define "hfcache.labels" -}}
-app.kubernetes.io/name: hfcache
-{{- end }}
-
 {{- define "chutes.labels" -}}
 chute-deployment: "true"
 {{- end }}
