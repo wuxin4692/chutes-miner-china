@@ -321,12 +321,12 @@ async def deploy_chute(chute: Chute, server: Server):
                             image="parachutes/cache-cleaner:latest",
                             command=["/bin/bash", "-c"],
                             args=[
-                                "mkdir -p /cache/huggingface /cache/civitai && chmod -R 777 /cache && python /scripts/cache_cleanup.py"
+                                "mkdir -p /cache/hub /cache/civitai && chmod -R 777 /cache && python /scripts/cache_cleanup.py"
                             ],
                             env=[
                                 V1EnvVar(
                                     name="HF_HOME",
-                                    value="/cache/huggingface",
+                                    value="/cache",
                                 ),
                                 V1EnvVar(
                                     name="CIVITAI_HOME",
@@ -404,7 +404,7 @@ async def deploy_chute(chute: Chute, server: Server):
                                     name="CUDA_VISIBLE_DEVICES",
                                     value=",".join([str(idx) for idx in range(chute.gpu_count)]),
                                 ),
-                                V1EnvVar(name="HF_HOME", value="/cache/huggingface"),
+                                V1EnvVar(name="HF_HOME", value="/cache"),
                                 V1EnvVar(name="CIVITAI_HOME", value="/cache/civitai"),
                             ],
                             resources=V1ResourceRequirements(
