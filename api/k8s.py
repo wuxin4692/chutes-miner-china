@@ -297,7 +297,7 @@ async def deploy_chute(chute: Chute, server: Server):
                         V1Volume(
                             name="cache",
                             host_path=V1HostPathVolumeSource(
-                                path="/var/lib/cache", type="DirectoryOrCreate"
+                                path="/var/snap/cache", type="DirectoryOrCreate"
                             ),
                         ),
                         V1Volume(
