@@ -1,6 +1,6 @@
 createPasswords: false  # XXX only ever set to true one time (first time)!!!
 
-hfCache:
+cache:
   maxAgeDays: 7
   maxSizeGB: 500
 
