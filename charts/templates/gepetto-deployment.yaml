@@ -41,6 +41,10 @@ spec:
           imagePullPolicy: {{ .Values.gepetto.imagePullPolicy }}
           command: ["poetry", "run", "python", "gepetto.py"]
           env:
+            - name: CACHE_MAX_AGE_DAYS
+              value: "{{ .Values.cache.max_age_days }}"
+            - name: CACHE_MAX_SIZE_GB
+              value: "{{ .Values.cache.max_size_gb }}"
             - name: MINER_SS58
               valueFrom:
                 secretKeyRef:

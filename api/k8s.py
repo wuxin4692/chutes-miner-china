@@ -333,11 +333,11 @@ async def deploy_chute(chute: Chute, server: Server):
                                     value="/cache/civitai",
                                 ),
                                 V1EnvVar(
-                                    name="HF_CACHE_MAX_AGE_DAYS",
+                                    name="CACHE_MAX_AGE_DAYS",
                                     value=str(settings.cache_max_age_days),
                                 ),
                                 V1EnvVar(
-                                    name="HF_CACHE_MAX_SIZE_GB",
+                                    name="CACHE_MAX_SIZE_GB",
                                     value=str(settings.cache_max_size_gb),
                                 ),
                             ],

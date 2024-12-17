@@ -1,8 +1,8 @@
 createPasswords: false  # XXX only ever set to true one time (first time)!!!
 
 cache:
-  maxAgeDays: 7
-  maxSizeGB: 500
+  max_age_days: 7
+  max_size_gb: 500
 
 validators:
   defaultRegistry: registry.chutes.ai
@@ -19,7 +19,7 @@ porter:
     nodePort: 31000
     port: 8000
     targetPort: 8000
-  real_host: 1.2.3.4
+  real_host: 0.0.0.0
   real_port: 32000
   image: parachutes/porter:latest
   imagePullPolicy: Always
