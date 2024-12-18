@@ -30,11 +30,11 @@ class Gepetto:
         Constructor.
         """
         self.pubsub = RedisListener()
-        self.remote_chutes = {validator.hotkey: [] for validator in settings.validators}
-        self.remote_images = {validator.hotkey: [] for validator in settings.validators}
-        self.remote_instances = {validator.hotkey: [] for validator in settings.validators}
-        self.remote_nodes = {validator.hotkey: [] for validator in settings.validators}
-        self.remote_metrics = {validator.hotkey: [] for validator in settings.validators}
+        self.remote_chutes = {validator.hotkey: {} for validator in settings.validators}
+        self.remote_images = {validator.hotkey: {} for validator in settings.validators}
+        self.remote_instances = {validator.hotkey: {} for validator in settings.validators}
+        self.remote_nodes = {validator.hotkey: {} for validator in settings.validators}
+        self.remote_metrics = {validator.hotkey: {} for validator in settings.validators}
         self._scale_lock = asyncio.Lock()
         self.setup_handlers()
 
@@ -659,7 +659,7 @@ class Gepetto:
         await self.chute_created(event_data, desired_count=current_count or 1)
 
     @staticmethod
-    async def optimal_scale_down_deployment(self, chute: Chute) -> Optional[Deployment]:
+    async def optimal_scale_down_deployment(chute: Chute) -> Optional[Deployment]:
         """
         Default strategy for scaling down chutes is to find a deployment based on
         server cost and what will be the server's GPU availability after removal.
@@ -670,6 +670,7 @@ class Gepetto:
                 func.count(GPU.gpu_id).label("total_gpus"),
                 func.sum(case((GPU.deployment_id != None, 1), else_=0)).label("used_gpus"),  # noqa
             )
+            .select_from(Server)
             .join(GPU)
             .group_by(Server.server_id)
             .subquery()
@@ -681,16 +682,17 @@ class Gepetto:
                     "removal_score"
                 ),
             )
+            .select_from(Deployment)
             .join(GPU)
             .join(Server)
             .join(gpu_counts, Server.server_id == gpu_counts.c.server_id)
             .where(Deployment.chute_id == chute.chute_id)
             .where(Deployment.created_at <= func.now() - timedelta(minutes=5))
-            .order_by("removal_score DESC")
+            .order_by(text("removal_score DESC"))
             .limit(1)
         )
         async with get_session() as session:
-            return (await session.execute(query)).scalar_one_or_none()
+            return (await session.execute(query)).unique().scalar_one_or_none()
 
     @staticmethod
     async def optimal_scale_up_server(chute: Chute) -> Optional[Server]:
@@ -757,7 +759,7 @@ class Gepetto:
             result = prom.custom_query("max by (chute_id) (invocation_last_timestamp)")
             for metric in result:
                 chute_id = metric["metric"]["chute_id"]
-                timestamp = datetime.fromtimestamp(metric["value"][1])
+                timestamp = datetime.fromtimestamp(float(metric["value"][1]))
                 last_invocations[chute_id] = timestamp
         except Exception as e:
             logger.error(f"Failed to fetch prometheus metrics: {e}")
@@ -767,9 +769,8 @@ class Gepetto:
         chute_values = {}
         for validator, validator_metrics in self.remote_metrics.items():
             for chute_id, metric in validator_metrics.items():
-                key = (validator, chute_id)  # Composite key of validator and chute_id
+                key = (validator, chute_id)
                 instance_count = metric["instance_count"]
-                # Calculate value per instance
                 value_per_instance = (
                     0 if not instance_count else metric["total_usage_usd"] / instance_count
                 )
@@ -797,31 +798,23 @@ class Gepetto:
             .subquery()
         )
 
+        value_whens = []
+        for (val, chute_id), value in chute_values.items():
+            value_whens.append((
+                and_(Deployment.validator == val, Deployment.chute_id == chute_id),
+                func.cast(1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float) * 100
+            ))
+
         # Main query to find preemptable deployments
         query = (
             select(
                 Deployment,
                 deployments_per_chute.c.deployment_count,
                 (
-                    # Base score on inverse of deployment value
-                    case(
-                        *[
-                            (
-                                and_(Deployment.validator == val, Deployment.chute_id == chute_id),
-                                func.cast(
-                                    1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float
-                                )
-                                * 100,
-                            )
-                            for (val, chute_id), value in chute_values.items()
-                        ],
-                        else_=100,  # If no metrics, assume low value
-                    )
-                    +
-                    # Bonus score for multiple deployments
-                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0)
-                    +
-                    # Bonus score for stale deployments
+                    (100 if not value_whens else case(*value_whens, else_=100)) +
+                    # Bonus for multiple deployments
+                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0) +
+                    # Penalty for recent activity
                     case((Deployment.chute_id.in_(last_invocations.keys()), 0), else_=25)
                 ).label("preemption_score"),
             )
@@ -892,7 +885,7 @@ class Gepetto:
                     # - consider both when counts are equal
                     # The default selects the deployment which when removed results in highest free GPU count on that server.
                     if (deployment := await self.optimal_scale_down_deployment(chute)) is not None:
-                        await self.undeploy(deployment)
+                        await self.undeploy(deployment.deployment_id)
                     else:
                         logger.error(f"Scale down impossible right now, sorry: {chute.chute_id}")
                         return
