@@ -251,6 +251,11 @@ kubectl create configmap gepetto-code --from-file=gepetto.py -o yaml --dry-run=c
 
 ### 5. Deploy the miner within your kubernetes cluster
 
+First, and __*exactly one time*__, you'll want to generate passwords for postgres and redis - __*never run this more than once or things will break!*__
+```bash
+helm template . --set createPasswords=true -s templates/one-time-passwords.yaml | kubectl apply -n chutes -f -
+```
+
 Personally, I love helm charts but don't actually like installing the charts as such.  A sane person would use the `helm install` command: https://helm.sh/docs/helm/helm_install/
 
 Or, if you're like me, you can run something like this, from within the `charts` directory:
