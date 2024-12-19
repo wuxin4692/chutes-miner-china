@@ -1,3 +1,9 @@
+- name: Give wireguard a kick
+  hosts: all
+  tasks:
+    - name: Kick WG
+      shell: wg-quick down wg0 && wg-quick up wg0
+
 - name: Get join command from primary node
   hosts: all
   tasks:

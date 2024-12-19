@@ -3,7 +3,7 @@ PrivateKey = {{ wg_private_key }}
 Address = 192.168.0.1/20
 ListenPort = 51820
 
-{% for host in hostvars %}
+{% for host in groups['all'] %}
 {% if not hostvars[host]['is_primary']|bool %}
 [Peer]
 PublicKey = {{ hostvars[host]['wg_public_key'] }}
