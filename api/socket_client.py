@@ -71,6 +71,7 @@ class SocketClient:
                 "bounty_change",
                 "image_created",
                 "image_deleted",
+                "instance_deleted",
             ):
                 logger.warning(f"Ignoring invalid broadcast: {data}")
                 return
