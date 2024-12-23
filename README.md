@@ -275,11 +275,12 @@ Make sure you install `chutes-miner-cli` and `fiber` package, ideally in a separ
 pip install chutes-miner-cli git+https://github.com/rayonlabs/fiber.git
 ```
 
-We don't know the netuid yet, but, it will be something like:
+Register.
 ```bash
-btcli subnet register --netuid [CHUTES NETUID] --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY]
+btcli subnet register --netuid 64 --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY]
 ```
 
+Announce axon.
 ```bash
 fiber-post-ip --netuid [CHUTES NETUID] --subtensor.network finney --external_port [PORTER PORT] --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY] --external_ip [PORTER IP]
 ```
