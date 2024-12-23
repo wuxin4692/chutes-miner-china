@@ -135,6 +135,10 @@ The easiest way to interact with kubernetes would be from within the primary nod
 - replace the IP address of the cluster with the public IP address of the primary node
 - since the IP will not match the cert, you will need to specify `--insecure-skip-tls-verify` when running any kubectl commands from this server (not necessary when done on primary node)
 
+If you plan to use the primary node, you should alias `kubectl` to be `microk8s kubectl`, e.g. `echo 'alias kubectl="microk8s kubectl"' >> .bashrc`
+
+And while you're at it, alias `helm` as well, e.g. `echo 'alias helm="microk8s helm"' >> .bashrc`
+
 You'll need to setup a few things manually:
 - Create a docker hub login to avoid getting rate-limited on pulling public images (you may not need this at all, but it can't hurt):
   - Head over to https://hub.docker.com/ and sign up, generate a new personal access token for public read-only access, then create the secret: `kubectl create secret docker-registry regcred --docker-server=docker.io --docker-username=[repalce with your username] --docker-password=[replace with your access token] --docker-email=[replace with your email]`
