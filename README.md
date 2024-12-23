@@ -129,9 +129,11 @@ Alternatively you can login to the primary server and run:
 microk8s config
 ```
 
-Install kubectl on your local machine, or whichever machine you plan to manage your miner from (which can be but likely isn't one of the servers you just deployed, personally I use a laptop for this): https://kubernetes.io/docs/reference/kubectl/
-
-Then copy the the kubernetes configuration you just found above into your management machine `~/.kube/config` (be sure to replace the IP address with the public IP address of the primary node to use this config on an external machine) -- this will also require using `--insecure-skip-tls-verify` when running any kubectl commands unless it's run from the primary node directly.
+The easiest way to interact with kubernetes would be from within the primary node, but you can alternatively set it up on your local machine or other server.  To do so:
+- install [kubectl](https://kubernetes.io/docs/reference/kubectl/)
+- copy the the kubernetes configuration from previous step to that machine at path `~/.kube/config`
+- replace the IP address of the cluster with the public IP address of the primary node
+- since the IP will not match the cert, you will need to specify `--insecure-skip-tls-verify` when running any kubectl commands from this server (not necessary when done on primary node)
 
 You'll need to setup a few things manually:
 - Create a docker hub login to avoid getting rate-limited on pulling public images (you may not need this at all, but it can't hurt):
