@@ -738,7 +738,7 @@ class Gepetto:
                     >= chute.gpu_count
                 ),
             )
-            .order_by(text("free_gpus ASC"), Server.hourly_cost.asc())
+            .order_by(Server.hourly_cost.asc(), text("free_gpus ASC"))
             .limit(1)
         )
         async with get_session() as session:
