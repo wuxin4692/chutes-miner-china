@@ -6,6 +6,7 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
 
 ## 📋 Table of Contents
 
+- [TL;DR](#%EF%B8%8F-tldr)
 - [Component Overview](#-component-overview)
    - [Provisioning/Management Tools](#%EF%B8%8F-provisioningmanagement-tools)
      - [Ansible](#-ansible)
@@ -36,6 +37,8 @@ Incentives are based on total compute time (including bounties give from being f
 You should probably run a wide variety of GPUs, from very cheap (a10, a5000, t4, etc.) to very powerful (8x h100 nodes).
 
 Never register more than one UID, since it will just reduce your total compute time and you'll compete with yourself pointlessly.  Just add capacity to one miner.
+
+Incentives/weights are calculated from 7 day sum of compute, so be patient when you start mining.  We want high quality, stable miners in it for the long haul!
 
 ## 🔍 Component Overview
 
