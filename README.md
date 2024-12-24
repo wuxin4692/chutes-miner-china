@@ -27,6 +27,16 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
    - [Deploy the Miner within Your Kubernetes Cluster](#5-deploy-the-miner-within-your-kubernetes-cluster)
    - [Register and Announce Your Axon](#6-register-and-announce-your-axon)
 
+## ⛏️ TL;DR
+
+The goal of mining on chutes is to provide as much compute as possible, optimizing for cold start times (running new applications or applications that have been preempted). Everything is automated with kubernetes, and coordinated by the `gepetto.py` script to optimize for cost efficiency and maximize your share of compute.
+
+Incentives are based on total compute time (including bounties give from being first to provide inference on code app).
+
+You should probably run a wide variety of GPUs, from very cheap (a10, a5000, t4, etc.) to very powerful (8x h100 nodes).
+
+Never register more than one UID, since it will just reduce your total compute time and you'll compete with yourself pointlessly.  Just add capacity to one miner.
+
 ## 🔍 Component Overview
 
 ### 🛠️ Provisioning/management tools
