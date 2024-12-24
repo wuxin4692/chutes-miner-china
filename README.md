@@ -4,22 +4,22 @@ This repository contains all components related to mining on the chutes.ai permi
 
 We've tried to automate the bulk of the process via ansible, helm/kubernetes, so while it may seem like a lot, it should be fairly easy to get started.
 
-## Table of Contents
+## 📋 Table of Contents
 
-- [Component Overview](#component-overview)
-   - [Provisioning/Management Tools](#provisioningmanagement-tools)
-     - [Ansible](#ansible)
-     - [Wireguard](#wireguard)
-     - [Kubernetes](#kubernetes)
-   - [Miner Components](#miner-components)
-     - [Postgres](#postgres)
-     - [Redis](#redis)
-     - [Porter](#porter)
-     - [GraVal Bootstrap](#graval-bootstrap)
-     - [Regstry Proxy](#registry-proxy)
-     - [API](#api)
-     - [Gepetto](#gepetto)
-- [Getting Started](#getting-started)
+- [Component Overview](#-component-overview)
+   - [Provisioning/Management Tools](#%EF%B8%8F-provisioningmanagement-tools)
+     - [Ansible](#-ansible)
+     - [Wireguard](#-wireguard)
+     - [Kubernetes](#%EF%B8%8F-kubernetes)
+   - [Miner Components](#-miner-components)
+     - [Postgres](#-postgres)
+     - [Redis](#-redis)
+     - [Porter](#%EF%B8%8F-porter)
+     - [GraVal Bootstrap](#-graval-bootstrap)
+     - [Regstry Proxy](#-registry-proxy)
+     - [API](#-api)
+     - [Gepetto](#%EF%B8%8F-gepetto)
+- [Getting Started](#-getting-started)
    - [Use Ansible to Provision Servers](#1-use-ansible-to-provision-servers)
    - [Configure Prerequisites](#2-configure-prerequisites)
    - [Configure Your Environment](#3-configure-your-environment)
@@ -27,18 +27,18 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
    - [Deploy the Miner within Your Kubernetes Cluster](#5-deploy-the-miner-within-your-kubernetes-cluster)
    - [Register and Announce Your Axon](#6-register-and-announce-your-axon)
 
-## Component Overview
+## 🔍 Component Overview
 
-### Provisioning/management tools
+### 🛠️ Provisioning/management tools
 
-#### Ansible
+#### 🤖 Ansible
 
 While not strictly necessary, we *highly* encourage all miners to use our provided [ansible](https://github.com/ansible/ansible) scripts to provision servers.
 There are many nuances and requirements that are quite difficult to setup manually.
 
 *More information on using the ansible scripts in subsequent sections.*
 
-#### Wireguard
+#### 🔒 Wireguard
 
 Wireguard is a fast, secure VPN service that is created by ansible provisioning, which allows your nodes to communicate when they are not all on the same internal network.
 
@@ -46,29 +46,29 @@ It is often the case that you'll want CPU instances on one provider (AWS, Google
 
 By installing Wireguard, your kubernetes cluster can span any number of providers without issue.
 
-#### Kubernetes
+#### ☸️ Kubernetes
 
 The entirety of the chutes miner must run within a [kubernetes](https://kubernetes.io/)  While not strictly necessary, we recommend using microk8s (which is all handled automatically from the ansible scripts).
 If you choose to not use microk8s, you must also modify or not use the provided ansible scripts.
 
-### Miner Components
+### 🧩 Miner Components
 
 *There are many components and moving parts to the system, so before you do anything, please familiarize yourself with each!*
 
-#### Postgres
+#### 🐘 Postgres
 
 We make heavy use of SQLAlchemy/postgres throughout chutes.  All servers, GPUs, deployments, etc., are tracked in postgresql which is deployed as a statefulset with a persistent volume claim within your kubernetes cluster.
 
-#### Redis
+#### 🔄 Redis
 
 Redis is primarily used for it's pubsub functionality within the miner.  Events (new chute added to validator, GPU added to the system, chute removed, etc.) trigger pubsub messages within redis, which trigger the various event handlers in code.
 
-#### Porter
+#### 🛡️ Porter
 
 This component is an anti-(D)DoS mechanism - when you register as miner on chutes, this will serve as the public axon IP/port, and it's only purpose is to tell the validators where the *real* axon is.
 Anyone attempting to DoS the axons will only take down the porters, and no harm will be done.
 
-#### GraVal bootstrap
+#### ✅ GraVal bootstrap
 
 Chutes uses a custom c/CUDA library for validating graphics cards: https://github.com/rayonlabs/graval
 
@@ -79,7 +79,7 @@ When you add a new node to your kubernetes cluster, each GPU on the server must 
 
 Each time a chute starts/gets deployed, it also needs to run GraVal to calculate the decryption key that will be necessary for the GPU(s) the chute is deployed on.
 
-#### Registry proxy
+#### 🔀 Registry proxy
 
 In order to keep the chute docker images somewhat private (since not all images are public), we employ a registry proxy on each miner that injects authentication via bittensor key signature.
 
@@ -93,20 +93,20 @@ The miner API code that injects the signaturs is here: https://github.com/rayonl
 
 Nginx then proxies the request upstream back to the validator in question (based on the hotkey as part of the subdomain), which validates the signatures and replaces those headers with basic auth that can be used with our self-hosted registry: https://github.com/rayonlabs/chutes-api/blob/main/api/registry/router.py
 
-#### API
+#### ⚡ API
 
 Each miner runs an API service, which does a variety of things including:
 - server/inventory management
 - websocket connection to the validator API
 - docker image registry authentication
 
-#### Gepetto
+#### 🧙‍♂️ Gepetto
 
 Gepetto is the key component responsible for all chute (aka app) management. Among other things, it is responsible for actually provisioning chutes, scaling up/down chutes, attempting to claim bounties, etc.
 
 This is the main thing to optimize as a miner!
 
-## Getting Started
+## 🚀 Getting Started
 
 ### 1. Use ansible to provision servers
 
@@ -141,10 +141,15 @@ And while you're at it, alias `helm` as well, e.g. `echo 'alias helm="microk8s h
 
 You'll need to setup a few things manually:
 - Create a docker hub login to avoid getting rate-limited on pulling public images (you may not need this at all, but it can't hurt):
-  - Head over to https://hub.docker.com/ and sign up, generate a new personal access token for public read-only access, then create the secret: `kubectl create secret docker-registry regcred --docker-server=docker.io --docker-username=[repalce with your username] --docker-password=[replace with your access token] --docker-email=[replace with your email]`
+  - Head over to https://hub.docker.com/ and sign up, generate a new personal access token for public read-only access, then create the secret:
+```
+kubectl create secret docker-registry regcred --docker-server=docker.io --docker-username=[repalce with your username] --docker-password=[replace with your access token] --docker-email=[replace with your email]
+```
 - Create the miner credentials
   - You'll need to find the ss58Address and secretSeed from the hotkey file you'll be using for mining, e.g. `cat ~/.bittensor/wallets/default/hotkeys/hotkey`
-  - `kubectl create secret generic miner-credentials --from-literal=ss58=[replace with ss58Address value] --from-literal=seed=[replace with secretSeed value, removing '0x' prefix] -n chutes`
+```
+kubectl create secret generic miner-credentials --from-literal=ss58=[replace with ss58Address value] --from-literal=seed=[replace with secretSeed value, removing '0x' prefix] -n chutes
+```
  
 Install helm on the same local/management machine: https://helm.sh/docs/intro/install/
 
@@ -161,7 +166,7 @@ Due to the extreme complexity and high expense of operating a validator on this 
 
 To that end, any validators you wish to support MUST be configured in the top-level validators section:
 
-The mainnet configuration is expected to be:
+The default mainnet configuration is:
 ```yaml
 validators:
   defaultRegistry: registry.chutes.ai
@@ -217,7 +222,10 @@ The other key is the `annotations` block, which by default looks for a node with
               - "true"
 ```
 
-You'll need to manually apply the annotation to that node, e.g.: `kubectl label node foobar-server-0 chutes-porter=true`
+The ansible provisioning script `join-cluster.yaml` will automatically label the porter node, or you can manually do so via kubectl, e.g.
+```
+kubectl label node foobar-server-0 chutes-porter=true
+```
 
 #### d. minerApi
 
@@ -288,7 +296,13 @@ btcli subnet register --netuid 64 --wallet.name [COLDKEY] --wallet.hotkey [HOTKE
 
 Announce axon.
 ```bash
-fiber-post-ip --netuid [CHUTES NETUID] --subtensor.network finney --external_port [PORTER PORT] --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY] --external_ip [PORTER IP]
+fiber-post-ip \
+  --netuid [CHUTES NETUID] \
+  --subtensor.network finney \
+  --external_ip [PORTER IP] \
+  --external_port [PORTER PORT] \
+  --wallet.name [COLDKEY] \
+  --wallet.hotkey [HOTKEY]
 ```
 
 Once you are registered, you'll need to bootstrap each of the GPU servers you've provisioned:
