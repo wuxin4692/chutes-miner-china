@@ -127,7 +127,7 @@ The first thing you'll want to do is provision your servers/kubernetes.
 
 ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc.
 
-You'll need a bare minimum of one non-GPU server responsible for running postgres, redis, gepetto, and API components (not chutes), although we'd recommend more than one, and __*ALL*__ of the GPU servers 😄
+You'll need a bare minimum of one non-GPU server (8 cores, 64gb ram minimum) responsible for running postgres, redis, gepetto, and API components (not chutes), although we'd recommend more than one, and __*ALL*__ of the GPU servers 😄
 
 [Here is a list of currently supported GPUs](https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17)
 
