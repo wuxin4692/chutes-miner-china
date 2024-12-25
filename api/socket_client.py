@@ -65,6 +65,7 @@ class SocketClient:
             logger.info(f"Received broadcast to miners: {data}")
             reason = data.get("reason")
             if reason not in (
+                "gpu_verified",
                 "chute_deleted",
                 "chute_updated",
                 "chute_created",
@@ -72,6 +73,7 @@ class SocketClient:
                 "image_created",
                 "image_deleted",
                 "instance_deleted",
+                "instance_verified",
             ):
                 logger.warning(f"Ignoring invalid broadcast: {data}")
                 return
