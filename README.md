@@ -102,7 +102,7 @@ This subdomain points to 127.0.0.1 so it always loads from the registry service 
 
 The registry proxy itself is an nginx server that performs an auth subrequest to the miner API.  See the nginx configmap: https://github.com/rayonlabs/chutes-miner/blob/main/charts/templates/registry-cm.yaml
 
-The miner API code that injects the signaturs is here: https://github.com/rayonlabs/chutes-miner/blob/main/api/registry/router.py
+The miner API code that injects the signatures is here: https://github.com/rayonlabs/chutes-miner/blob/main/api/registry/router.py
 
 Nginx then proxies the request upstream back to the validator in question (based on the hotkey as part of the subdomain), which validates the signatures and replaces those headers with basic auth that can be used with our self-hosted registry: https://github.com/rayonlabs/chutes-api/blob/main/api/registry/router.py
 
