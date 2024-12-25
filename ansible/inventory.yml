@@ -10,8 +10,6 @@ all:
     validator: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
     # By default, no nodes are the primary (CPU node running all the apps, wireguard, etc.) Override this flag exactly once below.
     is_primary: false
-    # By default, no nodes are the porter node, override this flag exactly once below.
-    porter: false
     # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
     gpu_enabled: true
     # The port you'll be using for the registry proxy, MUST MATCH chart/values.yaml registry.service.nodePort!
@@ -27,14 +25,6 @@ all:
       wireguard_ip: 192.168.0.1
       gpu_enabled: false
       is_primary: true
-
-    # This is the porter node, which should ideally be on a totally different network.
-    chutes-miner-porter-0:
-      ansible_host: 2.0.0.1
-      external_ip: 2.0.0.1
-      wireguard_ip: 192.168.0.2
-      gpu_enabled: false
-      porter: true
 
     # These are the GPU nodes, which actually run the chutes.
     chutes-miner-gpu-0:

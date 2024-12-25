@@ -20,14 +20,6 @@ ADD --chown=chutes api /app/api
 ENV PYTHONPATH=/app
 ENTRYPOINT ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-# Porter.
-FROM base AS porter
-ADD --chown=chutes porter /app
-WORKDIR /app
-RUN poetry install
-ENV PYTHONPATH=/app
-ENTRYPOINT poetry run python porter.py --real-host $REAL_AXON_HOST --real-port $REAL_AXON_PORT --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58
-
 # Cache cleaner.
 FROM python:3.10-slim AS cacheclean
 RUN pip install --no-cache-dir transformers==4.46.3

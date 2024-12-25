@@ -7,7 +7,6 @@
     ssh_public_key: "{{ ssh_key }}"
     microk8s_channel: "1.31/stable"
     enable_gpu: "{{ gpu_enabled | default(false) }}"
-    is_porter: "{{ porter | default(false) }}"
 
   tasks:
     - name: Set environment variables
