@@ -42,9 +42,10 @@ class Gepetto:
         """
         Configure the various event listeners/handlers.
         """
-        self.pubsub.on_event("gpu_added")(self.gpu_added)
+        self.pubsub.on_event("gpu_verified")(self.gpu_verified)
         self.pubsub.on_event("server_deleted")(self.server_deleted)
         self.pubsub.on_event("gpu_deleted")(self.gpu_deleted)
+        self.pubsub.on_event("instance_verified")(self.instance_verified)
         self.pubsub.on_event("instance_deleted")(self.instance_deleted)
         self.pubsub.on_event("chute_deleted")(self.chute_deleted)
         self.pubsub.on_event("chute_created")(self.chute_created)
@@ -413,12 +414,19 @@ class Gepetto:
         await k8s.undeploy(deployment_id)
         logger.success(f"Removed {deployment_id=}")
 
-    async def gpu_added(self, event_data):
+    async def gpu_verified(self, event_data):
         """
         Validator has finished verifying a GPU, so it is ready for use.
         """
-        logger.info(f"Received gpu_added event: {event_data}")
+        logger.info(f"Received gpu_verified event: {event_data}")
         # Nothing to do here really, the autoscaler should take care of it, but feel free to change...
+
+    async def instance_verified(self, event_data):
+        """
+        Validator has finished verifying an instance/deployment, so it should start receiving requests.
+        """
+        logger.info(f"Received instance_verified event: {event_data}")
+        # Nothing to do here really, it should just start receiving traffic.
 
     async def bounty_changed(self, event_data):
         """

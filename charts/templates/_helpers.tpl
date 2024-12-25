@@ -22,10 +22,6 @@ chute-deployment: "true"
 node-bootstrap: "true"
 {{- end }}
 
-{{- define "porter.labels" -}}
-app.kubernetes.io/name: chutes-porter
-{{- end }}
-
 {{- define "minerApi.labels" -}}
 app.kubernetes.io/name: api
 postgres-access: "true"

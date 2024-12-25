@@ -10,8 +10,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import ORJSONResponse
 import api.database.orms  # noqa: F401
 from api.server.router import router as servers_router
-from api.gpu.router import router as gpus_router
-from api.deployment.router import router as deployments_router
 from api.registry.router import router as registry_router
 from api.database import Base, engine
 from api.config import settings
@@ -70,8 +68,6 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
 app.include_router(servers_router, prefix="/servers", tags=["Servers"])
-app.include_router(gpus_router, prefix="/gpus", tags=["GPUs"])
-app.include_router(deployments_router, prefix="/deployments", tags=["Deployments"])
 app.include_router(registry_router, prefix="/registry", tags=["Registry"])
 app.get("/ping")(lambda: {"message": "pong"})
 

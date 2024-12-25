@@ -15,7 +15,6 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
    - [Miner Components](#-miner-components)
      - [Postgres](#-postgres)
      - [Redis](#-redis)
-     - [Porter](#%EF%B8%8F-porter)
      - [GraVal Bootstrap](#-graval-bootstrap)
      - [Regstry Proxy](#-registry-proxy)
      - [API](#-api)
@@ -76,11 +75,6 @@ We make heavy use of SQLAlchemy/postgres throughout chutes.  All servers, GPUs, 
 
 Redis is primarily used for it's pubsub functionality within the miner.  Events (new chute added to validator, GPU added to the system, chute removed, etc.) trigger pubsub messages within redis, which trigger the various event handlers in code.
 
-#### 🛡️ Porter
-
-This component is an anti-(D)DoS mechanism - when you register as miner on chutes, this will serve as the public axon IP/port, and it's only purpose is to tell the validators where the *real* axon is.
-Anyone attempting to DoS the axons will only take down the porters, and no harm will be done.
-
 #### ✅ GraVal bootstrap
 
 Chutes uses a custom c/CUDA library for validating graphics cards: https://github.com/rayonlabs/graval
@@ -131,7 +125,7 @@ You'll need a bare minimum of one non-GPU server (8 cores, 64gb ram minimum) res
 
 [Here is a list of currently supported GPUs](https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17)
 
-Head over to the [ansible](ansible/README.md) documentation for steps on setting up your bare metal instances.  Be sure to update inventory.yml 
+Head over to the [ansible](ansible/README.md) documentation for steps on setting up your bare metal instances.  Be sure to update inventory.yml
 
 ### 2. Configure prerequisites
 
@@ -163,7 +157,7 @@ kubectl create secret docker-registry regcred --docker-server=docker.io --docker
 ```
 kubectl create secret generic miner-credentials --from-literal=ss58=[replace with ss58Address value] --from-literal=seed=[replace with secretSeed value, removing '0x' prefix] -n chutes
 ```
- 
+
 Install helm on the same local/management machine: https://helm.sh/docs/intro/install/
 
 ### 3. Configure your environment
@@ -203,46 +197,9 @@ hfCache:
 If you have lots and lots of storage space, you may want to increase this or otherwise change defaults.
 
 
-#### c. porter
+#### c. minerApi
 
-If you wish to use porter for (D)DoS protection, you'll want to configure this section.
-```yaml
-porter:
-  enabled: true
-  real_host: 1.2.3.4
-  real_port: 32000
-  service:
-    type: NodePort
-    port: 8000
-    targetPort: 8000
-    nodePort: 31000
-    ...
-```
-The `real_host` value will be the IP address of your non-GPU primary kubernetes node (can also be a DNS name if you want to use multiple IPs or load balancer or whatever, but must be http/plain-text).
-
-The `real_port` will need to be within your kubernetes nodePort range which by default is something like 30000-32767, and will match the nodePort value you specify for minerApi.
-
-The other key is the `annotations` block, which by default looks for a node within your cluster labeled as `chutes-porter="true"`
-```yaml
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: chutes-porter
-            operator: In
-            values:
-              - "true"
-```
-
-The ansible provisioning script `join-cluster.yaml` will automatically label the porter node, or you can manually do so via kubectl, e.g.
-```
-kubectl label node foobar-server-0 chutes-porter=true
-```
-
-#### d. minerApi
-
-The defaults should do fairly nicely here, but you may want to tweak the service, namely nodePort, to play nicely with porter:
+The defaults should do fairly nicely here, but you may want to tweak the service, namely nodePort, if you want to change ports.
 ```yaml
 minerApi:
   ...
@@ -251,7 +208,7 @@ minerApi:
     ...
 ```
 
-#### e. other
+#### d. other
 
 Feel free to adjust redis/postgres/etc. as you wish, but probably not necessary.
 
@@ -297,26 +254,17 @@ kubectl apply -f miner-charts.yaml -n chutes
 
 ### 6. Register and announce your axon
 
-Make sure you install `chutes-miner-cli` and `fiber` package, ideally in a separate env.
+Make sure you install `chutes-miner-cli` package.
 ```bash
-pip install chutes-miner-cli git+https://github.com/rayonlabs/fiber.git
+pip install chutes-miner-cli
 ```
 
-Register.
+Register as a miner on subnet 64.
 ```bash
 btcli subnet register --netuid 64 --wallet.name [COLDKEY] --wallet.hotkey [HOTKEY]
 ```
 
-Announce axon.
-```bash
-fiber-post-ip \
-  --netuid [CHUTES NETUID] \
-  --subtensor.network finney \
-  --external_ip [PORTER IP] \
-  --external_port [PORTER PORT] \
-  --wallet.name [COLDKEY] \
-  --wallet.hotkey [HOTKEY]
-```
+You __*should not*__ announce an axon here!  All communications are done via client-side initialized socket.io connections so public axons serve no purpose and are just a security risk.
 
 Once you are registered, you'll need to bootstrap each of the GPU servers you've provisioned:
 ```bash
