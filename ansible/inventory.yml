@@ -7,7 +7,7 @@ all:
     # The initial username to login with, for fresh nodes that may not have your username setup.
     ansible_user: ubuntu
     # The default validator each GPU worker node will be assigned to.
-    validator: 5HNCJfK3PzFcNHmkdaWnHyw7hEvtNoM4SZpoqB6QchzpFxT5
+    validator: 5Dt7HZ7Zpw4DppPxFM7Ke3Cm7sDAWhsZXmM5ZAmE7dSVJbcQ
     # By default, no nodes are the primary (CPU node running all the apps, wireguard, etc.) Override this flag exactly once below.
     is_primary: false
     # We assume GPU is enabled on all nodes, but of course you need to disable this for the CPU nodes below.
