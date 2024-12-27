@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from loguru import logger
 from typing import Dict, Any, Optional
-from sqlalchemy import select, func, case, Float, text, literal, and_, or_
+from sqlalchemy import select, func, case, Float, text, literal, and_, or_, update
 from sqlalchemy.orm import selectinload
 from prometheus_api_client import PrometheusConnect
 from api.config import settings, validator_by_hotkey, Validator
@@ -419,6 +419,13 @@ class Gepetto:
         Validator has finished verifying a GPU, so it is ready for use.
         """
         logger.info(f"Received gpu_verified event: {event_data}")
+        async with get_session() as session:
+            await session.execute(
+                update(GPU)
+                .where(GPU.server_id == event_data.get("gpu_id"))
+                .values({"verified": True})
+            )
+            await session.commit()
         # Nothing to do here really, the autoscaler should take care of it, but feel free to change...
 
     async def instance_verified(self, event_data):
@@ -426,6 +433,12 @@ class Gepetto:
         Validator has finished verifying an instance/deployment, so it should start receiving requests.
         """
         logger.info(f"Received instance_verified event: {event_data}")
+        async with get_session() as session:
+            await session.execute(
+                update(Deployment)
+                .where(Deployment.instance_id == event_data.get("instance_id"))
+                .values({"verified": True})
+            )
         # Nothing to do here really, it should just start receiving traffic.
 
     async def bounty_changed(self, event_data):
@@ -808,10 +821,12 @@ class Gepetto:
 
         value_whens = []
         for (val, chute_id), value in chute_values.items():
-            value_whens.append((
-                and_(Deployment.validator == val, Deployment.chute_id == chute_id),
-                func.cast(1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float) * 100
-            ))
+            value_whens.append(
+                (
+                    and_(Deployment.validator == val, Deployment.chute_id == chute_id),
+                    func.cast(1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float) * 100,
+                )
+            )
 
         # Main query to find preemptable deployments
         query = (
@@ -819,9 +834,11 @@ class Gepetto:
                 Deployment,
                 deployments_per_chute.c.deployment_count,
                 (
-                    (100 if not value_whens else case(*value_whens, else_=100)) +
+                    (100 if not value_whens else case(*value_whens, else_=100))
+                    +
                     # Bonus for multiple deployments
-                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0) +
+                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0)
+                    +
                     # Penalty for recent activity
                     case((Deployment.chute_id.in_(last_invocations.keys()), 0), else_=25)
                 ).label("preemption_score"),

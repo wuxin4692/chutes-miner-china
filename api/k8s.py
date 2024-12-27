@@ -537,7 +537,7 @@ async def kick_cilium(node_name: str):
     """
     pod_list = k8s_core_client().list_namespaced_pod(
         namespace="kube-system",
-        label_selector=f"k8s-app=cilium",
+        label_selector="k8s-app=cilium",
     )
     target_pod = None
     for pod in pod_list.items:
@@ -547,7 +547,5 @@ async def kick_cilium(node_name: str):
     if not target_pod:
         return
     k8s_core_client().delete_namespaced_pod(
-        name=target_pod.metadata.name,
-        namespace="kube-system",
-        body=V1DeleteOptions()
+        name=target_pod.metadata.name, namespace="kube-system", body=V1DeleteOptions()
     )
