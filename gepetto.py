@@ -225,7 +225,7 @@ class Gepetto:
                     if deployment:
                         deployment.active = True
                         if data.get("verified"):
-                            deployment.verified = True
+                            deployment.verified_at = func.now()
                         await session.commit()
                 logger.success(f"Successfully activated {deployment.instance_id=}")
 
@@ -238,7 +238,7 @@ class Gepetto:
                 query = select(Deployment).where(
                     or_(
                         Deployment.active.is_(False),
-                        Deployment.verified.is_(False),
+                        Deployment.verified_at.is_(None),
                     ),
                     Deployment.stub.is_(False),
                 )
@@ -437,7 +437,7 @@ class Gepetto:
             await session.execute(
                 update(Deployment)
                 .where(Deployment.instance_id == event_data.get("instance_id"))
-                .values({"verified": True})
+                .values({"verified_at": func.now()})
             )
         # Nothing to do here really, it should just start receiving traffic.
 

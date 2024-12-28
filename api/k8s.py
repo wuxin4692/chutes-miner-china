@@ -247,7 +247,7 @@ async def deploy_chute(chute: Chute, server: Server):
             chute_id=chute.chute_id,
             version=chute.version,
             active=False,
-            verified=False,
+            verified_at=None,
             stub=True,
         )
         session.add(deployment)

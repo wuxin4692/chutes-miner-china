@@ -27,7 +27,7 @@ class Deployment(Base):
     server_id = Column(String, ForeignKey("servers.server_id", ondelete="CASCADE"), nullable=False)
     version = Column(String, nullable=False)
     active = Column(Boolean, default=False)
-    verified = Column(Boolean, default=False)
+    verified_at = Column(DateTime(timezone=True))
     stub = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
