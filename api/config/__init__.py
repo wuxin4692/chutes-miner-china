@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     redis_client: redis.Redis = redis.Redis.from_url(
         os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
     )
-    netuid: int = int(os.getenv("NETUID", "19"))
+    netuid: int = int(os.getenv("NETUID", "64"))
     subtensor: str = os.getenv("SUBTENSOR_ADDRESS", "wss://entrypoint-finney.opentensor.ai:443")
     namespace: str = os.getenv("CHUTES_NAMESPACE", "chutes")
     graval_bootstrap_image: str = os.getenv(

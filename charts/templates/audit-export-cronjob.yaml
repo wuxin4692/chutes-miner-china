@@ -20,6 +20,10 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            postgres-access: "true"
+            redis-access: "true"
         spec:
           {{- with .Values.auditExporter.nodeSelector }}
           nodeSelector:
