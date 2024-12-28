@@ -27,19 +27,49 @@ import api.database.orms  # noqa
 
 def get_prometheus_metrics(end_time) -> dict:
     """
-    Query prometheus to get metrics for each chute that ran at least partially during our target time range.
+    Query prometheus to get both duration and count metrics for each chute that ran during the target time range.
     """
     prom = PrometheusConnect(url="http://prometheus-server")
-    query = 'sum(increase(invocation_duration_sum{status="200"}[1h])) by (chutes_deployment_id, chute_id, function)'
-    result = prom.custom_query_range(query, start_time=end_time, end_time=end_time, step="1h")
+
+    # Query for compute time.
+    duration_query = 'sum(increase(invocation_duration_sum{status="200"}[1h])) by (chutes_deployment_id, chute_id, function)'
+    duration_result = prom.custom_query_range(
+        duration_query, start_time=end_time, end_time=end_time, step="1h"
+    )
+
+    # Query for invocation counts.
+    count_query = 'sum(increase(invocation_total{status="200"}[1h])) by (chutes_deployment_id, chute_id, function)'
+    count_result = prom.custom_query_range(
+        count_query, start_time=end_time, end_time=end_time, step="1h"
+    )
+
+    # Create a mapping of metric keys to count values
+    count_map = {
+        (
+            item["metric"]["chutes_deployment_id"],
+            item["metric"]["chute_id"],
+            item["metric"]["function"],
+        ): int(float(item["values"][0][1]))
+        for item in count_result
+        if item.get("values")
+    }
+
     return [
         {
             "chute_id": item["metric"]["chute_id"],
             "deployment_id": item["metric"]["chutes_deployment_id"],
             "function": item["metric"]["function"],
             "total_seconds": float(item["values"][0][1]),
+            "total_count": count_map.get(
+                (
+                    item["metric"]["chutes_deployment_id"],
+                    item["metric"]["chute_id"],
+                    item["metric"]["function"],
+                ),
+                0,
+            ),
         }
-        for item in result
+        for item in duration_result
         if item.get("values") and float(item["values"][0][1]) > 0
     ]
 
