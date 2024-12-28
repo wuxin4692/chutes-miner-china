@@ -13,6 +13,7 @@ import json
 import aiohttp
 import asyncio
 import hashlib
+import backoff
 from loguru import logger
 from sqlalchemy import text
 from datetime import UTC, datetime, timedelta
@@ -142,6 +143,13 @@ async def generate_current_miner_audit_info() -> dict:
     return sha256, report_data
 
 
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=10,
+    max_tries=12,
+)
 def commit(sha256) -> int:
     """
     Commit this bucket of audit data to chain.
@@ -162,7 +170,6 @@ def commit(sha256) -> int:
         wait_for_finalization=False,
     )
     response.process_events()
-    print(response)
     assert response.is_success
     block_hash = response.block_hash
     block_number = substrate.get_block_number(block_hash)
@@ -170,6 +177,13 @@ def commit(sha256) -> int:
     return block_number
 
 
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=10,
+    max_tries=6,
+)
 async def upload(report_data, block_number):
     """
     Upload the report data to the validator.
@@ -181,7 +195,6 @@ async def upload(report_data, block_number):
         async with session.post(
             "https://api.chutes.ai/audit/miner_data", headers=headers, data=payload
         ) as resp:
-            print(await resp.text())
             resp.raise_for_status()
             logger.success(f"Uploaded report data: {await resp.json()}")
 
@@ -190,10 +203,9 @@ async def main():
     sha256, report_data = await generate_current_miner_audit_info()
 
     # Commit report checksum to our hotkey's metadata for this netuid.
-    # block = commit(sha256)
+    block = commit(sha256)
 
     # Upload.
-    block = 4581635
     await upload(report_data, block)
 
 
