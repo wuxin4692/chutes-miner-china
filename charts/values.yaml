@@ -164,7 +164,7 @@ registry:
         - "registry.chutes.ai"
       defaultUpstream: "registry.chutes.ai"
 
-invocationExporter:
+auditExporter:
   image: parachutes/miner:latest
   nodeSelector:
     kubernetes.io/hostname: chutes-miner-cpu-0
