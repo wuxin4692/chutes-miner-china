@@ -63,6 +63,7 @@ class Gepetto:
         await self.reconsile()
         asyncio.create_task(self.activator())
         asyncio.create_task(self.autoscaler())
+        asyncio.create_task(self.reconsiler())
         await self.pubsub.start()
 
     @staticmethod
@@ -241,6 +242,7 @@ class Gepetto:
                         Deployment.verified_at.is_(None),
                     ),
                     Deployment.stub.is_(False),
+                    Deployment.instance_id.is_not(None),
                 )
                 async with get_session() as session:
                     deployments = (await session.execute(query)).unique().scalars()
@@ -1030,7 +1032,7 @@ class Gepetto:
                             )
                     await session.delete(deployment)
 
-                elif deployment.stub and datetime.now(
+                elif (deployment.stub or not deployment.instance_id) and datetime.now(
                     timezone.utc
                 ) - deployment.created_at >= timedelta(minutes=30):
                     logger.warning(
@@ -1156,6 +1158,19 @@ class Gepetto:
                     logger.warning(f"Server/node {node_id} not tracked in inventory, ignoring...")
 
             await asyncio.gather(*tasks)
+
+    async def reconsiler(self):
+        """
+        Reconsile on a regular basis.
+        """
+        while True:
+            await asyncio.sleep(600)
+            try:
+                await self.reconsile()
+            except Exception as exc:
+                logger.error(
+                    f"Unexpected error in reconsiliation loop: {exc}\n{traceback.format_exc()}"
+                )
 
 
 async def main():
