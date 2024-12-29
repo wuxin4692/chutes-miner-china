@@ -217,7 +217,7 @@ Feel free to adjust redis/postgres/etc. as you wish, but probably not necessary.
 Gepetto is the most important component as a miner.  It is responsible for selecting chutes to deploy, scale up, scale down, delete, etc.
 You'll want to thoroughly examine this code and make any changes that you think would gain you more total compute time.
 
-Once you are satisfied with the state of the `gepetto.py` file, you'll need to create a configmap object in kubernetes that stores your file:
+Once you are satisfied with the state of the `gepetto.py` file, you'll need to create a configmap object in kubernetes that stores your file (from inside the `chutes-miner` directory, from cloning repo):
 ```bash
 kubectl create configmap gepetto-code --from-file=gepetto.py -n chutes
 ```
@@ -236,6 +236,7 @@ kubectl create configmap gepetto-code --from-file=gepetto.py -o yaml --dry-run=c
 ### 5. Deploy the miner within your kubernetes cluster
 
 First, and __*exactly one time*__, you'll want to generate passwords for postgres and redis - __*never run this more than once or things will break!*__
+Execute this from the `charts` directory:
 ```bash
 helm template . --set createPasswords=true -s templates/one-time-passwords.yaml | kubectl apply -n chutes -f -
 ```
