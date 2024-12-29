@@ -6,7 +6,7 @@ Information collected:
   - prometheus server uptime (so we can discard incongruencies when data may be missing)
   - deployment audit information, so we can check how many inference requests we *should* have gotten, in theory...
 
-The information is then signed with our hotkey and uploaded to the chutes validator, and the hash of the export payload is commited to chain.
+The information is then signed with our hotkey and uploaded to the chutes validator, and the hash of the export payload is committed to chain.
 """
 
 import json
