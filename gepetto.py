@@ -280,6 +280,9 @@ class Gepetto:
                     local_count = await self.count_deployments(
                         chute_id, chute_info["version"], validator
                     )
+                    if local_count >= 3:
+                        logger.info(f"Already have max instances of {chute_id=}")
+                        continue
 
                     # If there are no metrics, it means the chute is not being actively used, so don't scale.
                     metrics = self.remote_metrics.get(validator, {}).get(chute_id, {})
@@ -316,7 +319,8 @@ class Gepetto:
                     # Calculate value ratio
                     chute_value = potential_gain / potential_server.hourly_cost
                     logger.info(
-                        f"Estimated {potential_gain=} for name={chute_info['name']} chute_id= on {validator=}, "
+                        f"Estimated {potential_gain=} for name={chute_info['name']} "
+                        f"chute_id={chute_info['chute_id']} on {validator=}, "
                         f"optimal server hourly cost={potential_server.hourly_cost} "
                         f"on server {potential_server.name}, {chute_value=} "
                         f"{local_count=} {total_count=}"

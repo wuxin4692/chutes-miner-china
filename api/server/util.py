@@ -167,7 +167,7 @@ async def deploy_graval(
     # Double check that we don't already have chute deployments.
     existing_deployments = k8s_app_client().list_namespaced_deployment(
         namespace=settings.namespace,
-        label_selector="chute/chute=true,app=graval-bootstrap",
+        label_selector="chute/chute=true,app=graval",
     )
     if any(
         [dep for dep in existing_deployments.items if dep.spec.template.spec.node_name == node_name]
@@ -187,13 +187,17 @@ async def deploy_graval(
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
             name=f"graval-{node_name}",
-            labels={"app": "graval", "chute/chute": "false", "node": node_name},
+            labels={
+                "app": "graval",
+                "chute/chute": "false",
+                "graval-node": node_name,
+            },
         ),
         spec=V1DeploymentSpec(
             replicas=1,
-            selector={"matchLabels": {"app": "graval", "node": node_name}},
+            selector={"matchLabels": {"app": "graval", "graval-node": node_name}},
             template=V1PodTemplateSpec(
-                metadata=V1ObjectMeta(labels={"app": "graval", "node": node_name}),
+                metadata=V1ObjectMeta(labels={"app": "graval", "graval-node": node_name}),
                 spec=V1PodSpec(
                     node_name=node_name,
                     runtime_class_name="nvidia-container-runtime",
@@ -244,11 +248,11 @@ async def deploy_graval(
     service = V1Service(
         metadata=V1ObjectMeta(
             name=f"graval-service-{node_name}",
-            labels={"app": "graval", "node": node_name},
+            labels={"app": "graval", "graval-node": node_name},
         ),
         spec=V1ServiceSpec(
             type="NodePort",
-            selector={"app": "graval", "node": node_name},
+            selector={"app": "graval", "graval-node": node_name},
             ports=[V1ServicePort(port=8000, target_port=8000, protocol="TCP")],
         ),
     )
@@ -459,6 +463,11 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
             k8s_app_client().delete_namespaced_deployment(
                 name=f"graval-{node_name}", namespace=settings.namespace
             )
+            label_selector = f"graval-node={node_name}"
+
+            from api.k8s import wait_for_deletion
+
+            await wait_for_deletion(label_selector)
         except Exception:
             ...
         if delete_node and False:

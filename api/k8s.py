@@ -7,6 +7,7 @@ import uuid
 import traceback
 from loguru import logger
 from typing import List, Dict, Any
+from kubernetes import watch
 from kubernetes.client import (
     V1Deployment,
     V1Service,
@@ -160,6 +161,44 @@ async def delete_code(chute_id: str, version: str):
             raise
 
 
+async def wait_for_deletion(label_selector: str, timeout_seconds: int = 120):
+    """
+    Wait for a deleted pod to be fully removed.
+    """
+    if (
+        not k8s_core_client()
+        .list_namespaced_pod(
+            namespace=settings.namespace,
+            label_selector=label_selector,
+        )
+        .items
+    ):
+        logger.info(f"Nothing to wait for: {label_selector}")
+        return
+
+    w = watch.Watch()
+    try:
+        for event in w.stream(
+            k8s_core_client().list_namespaced_pod,
+            namespace=settings.namespace,
+            label_selector=label_selector,
+            timeout_seconds=timeout_seconds,
+        ):
+            if (
+                not k8s_core_client()
+                .list_namespaced_pod(
+                    namespace=settings.namespace,
+                    label_selector=label_selector,
+                )
+                .items
+            ):
+                logger.success(f"Deletion of {label_selector=} is complete")
+                w.stop()
+                break
+    except Exception as exc:
+        logger.warning(f"Error waiting for pods to be deleted: {exc}")
+
+
 async def undeploy(deployment_id: str):
     """
     Delete a deployment, and associated service.
@@ -178,6 +217,7 @@ async def undeploy(deployment_id: str):
         )
     except Exception as exc:
         logger.warning(f"Error deleting deployment from k8s: {exc}")
+    await wait_for_deletion(f"app=chute-{deployment_id}", timeout_seconds=15)
 
 
 async def create_code_config_map(chute: Chute):

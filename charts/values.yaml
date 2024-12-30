@@ -168,3 +168,8 @@ auditExporter:
   image: parachutes/miner:latest
   nodeSelector:
     kubernetes.io/hostname: chutes-miner-cpu-0
+
+failedChuteCleanup:
+  image: bitnami/kubectl:latest
+  nodeSelector:
+    kubernetes.io/hostname: chutes-miner-cpu-0
