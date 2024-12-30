@@ -121,9 +121,19 @@ The first thing you'll want to do is provision your servers/kubernetes.
 
 ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc.
 
+#### Important storage note!
+
+Some providers mount the primary storage in inconvient ways, e.g. latitude.sh when using raid 1 mounts the volume on `/home`, hyperstack mounts under `/ephemeral`, etc.  Before running the ansible scripts, be sure to login to your servers and check how the storage is allocated.  If you want storage space for huggingface cache, images, etc., you'll want to be sure as much as possible is allocated under `/var/snap`.
+You can do this with a simple bind mount, e.g. if the main storage is under `/home`, run:
+```bash
+rsync -azv /var/snap/ /home/snap/
+echo '/home/snap /var/snap none bind 0 0' >> /etc/fstab
+mount -a
+```
+
 You'll need a bare minimum of one non-GPU server (8 cores, 64gb ram minimum) responsible for running postgres, redis, gepetto, and API components (not chutes), although we'd recommend more than one, and __*ALL*__ of the GPU servers 😄
 
-[Here is a list of currently supported GPUs](https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17)
+[The list of supported GPUs can be found here](https://github.com/rayonlabs/chutes-api/blob/main/api/gpu.py)
 
 Head over to the [ansible](ansible/README.md) documentation for steps on setting up your bare metal instances.  Be sure to update inventory.yml
 
