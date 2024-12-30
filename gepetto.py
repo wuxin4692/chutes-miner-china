@@ -276,10 +276,19 @@ class Gepetto:
         for validator, chutes in self.remote_chutes.items():
             for chute_id, chute_info in chutes.items():
                 try:
+                    chute = await self.load_chute(chute_id, chute_info["version"], validator)
+                    if not chute:
+                        continue
+
                     # Count how many deployments we already have.
                     local_count = await self.count_deployments(
                         chute_id, chute_info["version"], validator
                     )
+                    if local_count > 3:
+                        logger.warning(f"Too many instances of {chute_id=}, scaling down!")
+                        await self.scale_chute(chute, 3)
+                        continue
+
                     if local_count >= 3:
                         logger.info(f"Already have max instances of {chute_id=}")
                         continue
@@ -307,10 +316,6 @@ class Gepetto:
                     )
 
                     # See if we have a server that could even handle it.
-                    chute = await self.load_chute(chute_id, chute_info["version"], validator)
-                    if not chute:
-                        logger.warning(f"Chute not found locally? {chute_id=}")
-                        continue
                     potential_server = await self.optimal_scale_up_server(chute)
                     if not potential_server:
                         logger.info(f"No viable server to scale {chute_id=}")
