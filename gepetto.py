@@ -899,7 +899,7 @@ class Gepetto:
                     to_delete.append(deployment.deployment_id)
                     available_gpus += len(deployment.gpus)
                     proposed_counts[deployment.chute_id] -= 1
-                else:
+                elif deployment.chute_id in proposed_counts:
                     # Only allow 0 global replicas if we aren't getting invocations.
                     message = (
                         f"Preempting {deployment.deployment_id=} would leave no global instances!"
