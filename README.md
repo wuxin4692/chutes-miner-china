@@ -165,7 +165,10 @@ kubectl create secret docker-registry regcred --docker-server=docker.io --docker
 - Create the miner credentials
   - You'll need to find the ss58Address and secretSeed from the hotkey file you'll be using for mining, e.g. `cat ~/.bittensor/wallets/default/hotkeys/hotkey`
 ```
-kubectl create secret generic miner-credentials --from-literal=ss58=[replace with ss58Address value] --from-literal=seed=[replace with secretSeed value, removing '0x' prefix] -n chutes
+kubectl create secret generic miner-credentials \
+  --from-literal=ss58=[replace with ss58Address value] \
+  --from-literal=seed=[replace with secretSeed value, removing '0x' prefix] \
+  -n chutes
 ```
 
 Install helm on the same local/management machine: https://helm.sh/docs/intro/install/
