@@ -16,6 +16,8 @@ all:
     registry_port: 30500
     # SSH sometimes just hangs without this...
     ansible_ssh_common_args: '-o ControlPath=none'
+    # SSH retries...
+    ansible_ssh_retries: 3
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.
