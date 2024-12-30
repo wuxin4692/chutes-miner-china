@@ -25,7 +25,7 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
    - [Configure Your Environment](#3-configure-your-environment)
    - [Update Gepetto with Your Optimized Strategy](#4-update-gepetto-with-your-optimized-strategy)
    - [Deploy the Miner within Your Kubernetes Cluster](#5-deploy-the-miner-within-your-kubernetes-cluster)
-   - [Register and Announce Your Axon](#6-register-and-announce-your-axon)
+   - [Register](#6-register)
 
 ## ⛏️ TL;DR
 
@@ -263,12 +263,7 @@ Then, you can examine the chart values to see exactly how your modifications to 
 kubectl apply -f miner-charts.yaml -n chutes
 ```
 
-### 6. Register and announce your axon
-
-Make sure you install `chutes-miner-cli` package.
-```bash
-pip install chutes-miner-cli
-```
+### 6. Register
 
 Register as a miner on subnet 64.
 ```bash
@@ -277,7 +272,15 @@ btcli subnet register --netuid 64 --wallet.name [COLDKEY] --wallet.hotkey [HOTKE
 
 You __*should not*__ announce an axon here!  All communications are done via client-side initialized socket.io connections so public axons serve no purpose and are just a security risk.
 
-Once you are registered, you'll need to bootstrap each of the GPU servers you've provisioned:
+
+### 7. Add your GPU nodes to inventory
+
+Make sure you install `chutes-miner-cli` package.
+```bash
+pip install chutes-miner-cli
+```
+
+Run this for each GPU node in your inventory:
 ```bash
 chutes-miner add-node \
   --name [SERVER NAME FROM inventory.yaml] \
@@ -294,3 +297,5 @@ chutes-miner add-node \
 - `--gpu-short-ref` is a short identifier string for the type of GPU on the server, e.g. `a6000`, `l40s`, `h100_sxm`, etc.  See supported GPUs here: https://github.com/rayonlabs/chutes-api/blob/c0df10cff794c17684be9cf1111c00d84eb015b0/api/gpu.py#L17
 - `--hotkey` is the path to the hotkey file you registered with, used to sign requests to be able to manage inventory on your system via the miner API
 - `--miner-api` is the base URL to your miner API service, which will be http://[non-GPU node IP]:[minerAPI port, default 32000], i.e. find the public/external IP address of your CPU-only node, and whatever port you configured for the API service (which is 32000 if you didn't change the default).
+
+You can add additional GPU nodes at any time by simply updating inventory.yaml and rerunning the `site.yaml` and `join-cluster.yaml` playbooks: [ansible readme](/ansible/README.md#to-add-a-new-node-after-the-fact)
