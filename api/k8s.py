@@ -217,7 +217,7 @@ async def undeploy(deployment_id: str):
         )
     except Exception as exc:
         logger.warning(f"Error deleting deployment from k8s: {exc}")
-    await wait_for_deletion(f"app=chute-{deployment_id}", timeout_seconds=15)
+    await wait_for_deletion(f"chutes/deployment-id={deployment_id}", timeout_seconds=15)
 
 
 async def create_code_config_map(chute: Chute):

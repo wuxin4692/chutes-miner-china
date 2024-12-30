@@ -12,6 +12,7 @@ from loguru import logger
 from typing import Dict, Any, Optional
 from sqlalchemy import select, func, case, text, or_, update
 from sqlalchemy.orm import selectinload
+from prometheus_api_client import PrometheusConnect
 from api.config import settings, validator_by_hotkey, Validator
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
@@ -782,6 +783,20 @@ class Gepetto:
         """
         Force deploy a chute by preempting other deployments (assuming a server exists that can be used).
         """
+
+        # Get the prometheus data for staleness check
+        prom = PrometheusConnect(url=settings.prometheus_url)
+        last_invocations = {}
+        try:
+            result = prom.custom_query("max by (chute_id) (invocation_last_timestamp)")
+            for metric in result:
+                chute_id = metric["metric"]["chute_id"]
+                timestamp = datetime.fromtimestamp(float(metric["value"][1]))
+                last_invocations[chute_id] = timestamp.replace(tzinfo=None)
+        except Exception as e:
+            logger.error(f"Failed to fetch prometheus metrics: {e}")
+            pass
+
         # Calculate value metrics for each chute per validator
         chute_values = {}
         for chute_id, metric in self.remote_metrics.get(chute.validator, {}).items():
@@ -863,7 +878,10 @@ class Gepetto:
                     return
 
                 # Can't preempt deployments that haven't been verified yet.
-                if not deployment.verified_at or deployment.chute_id == chute.chute_id:
+                if not deployment.verified_at:
+                    logger.warning(
+                        f"Cannot preempt unverified deployment: {deployment.deployment_id}"
+                    )
                     continue
 
                 # Can't preempt deployments that are <= 5 minutes since verification.
@@ -881,6 +899,23 @@ class Gepetto:
                     to_delete.append(deployment.deployment_id)
                     available_gpus += len(deployment.gpus)
                     proposed_counts[deployment.chute_id] -= 1
+                else:
+                    # Only allow 0 global replicas if we aren't getting invocations.
+                    message = (
+                        f"Preempting {deployment.deployment_id=} would leave no global instances!"
+                    )
+                    if (last_invoked := last_invocations.get(deployment.chute_id)) is not None:
+                        time_since_invoked = (
+                            datetime.now(timezone.utc).replace(tzinfo=None) - last_invoked
+                        )
+                        if time_since_invoked >= timedelta(minutes=10):
+                            to_delete.append(deployment.deployment_id)
+                            available_gpus += len(deployment.gpus)
+                            proposed_counts[deployment.chute_id] -= 1
+                        else:
+                            logger.warning(message)
+                    else:
+                        logger.warning(message)
 
                 # Would we reach a sufficient number of free GPUs?
                 if available_gpus >= chute.gpu_count:
