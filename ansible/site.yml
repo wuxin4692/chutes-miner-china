@@ -387,6 +387,12 @@
     - name: Set hostname
       hostname:
         name: "{{ inventory_hostname }}"
+        use: systemd
+
+    - name: Update /etc/hostname
+      copy:
+        content: "{{ inventory_hostname }}"
+        dest: /etc/hostname
 
     - name: Reboot
       reboot:
