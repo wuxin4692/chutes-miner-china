@@ -6,12 +6,12 @@ import aiohttp
 import asyncio
 import orjson as json
 import traceback
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from loguru import logger
 from typing import Dict, Any, Optional
-from sqlalchemy import select, func, case, Float, text, literal, and_, or_, update
+from sqlalchemy import select, func, case, text, or_, update
 from sqlalchemy.orm import selectinload
-from prometheus_api_client import PrometheusConnect
 from api.config import settings, validator_by_hotkey, Validator
 from api.redis_pubsub import RedisListener
 from api.auth import sign_request
@@ -778,125 +778,152 @@ class Gepetto:
             row = result.first()
             return row.Server if row else None
 
-    async def optimal_preemptable_deployment(self, chute: Chute) -> Optional[Deployment]:
+    async def preempting_deploy(self, chute: Chute):
         """
-        Find the optimal deployment to preempt, prioritizing low-value deployments.
-        Value is determined by usage revenue divided by server cost.
-        Takes into account different validators to avoid conflicts with same chute IDs.
+        Force deploy a chute by preempting other deployments (assuming a server exists that can be used).
         """
-        # Get the prometheus data for staleness check
-        prom = PrometheusConnect(url=settings.prometheus_url)
-        last_invocations = {}
-        try:
-            result = prom.custom_query("max by (chute_id) (invocation_last_timestamp)")
-            for metric in result:
-                chute_id = metric["metric"]["chute_id"]
-                timestamp = datetime.fromtimestamp(float(metric["value"][1]))
-                last_invocations[chute_id] = timestamp
-        except Exception as e:
-            logger.error(f"Failed to fetch prometheus metrics: {e}")
-            pass
-
         # Calculate value metrics for each chute per validator
         chute_values = {}
-        for validator, validator_metrics in self.remote_metrics.items():
-            for chute_id, metric in validator_metrics.items():
-                key = (validator, chute_id)
-                instance_count = metric["instance_count"]
-                value_per_instance = (
-                    0 if not instance_count else metric["total_usage_usd"] / instance_count
-                )
-                chute_values[key] = value_per_instance
-
-        # Create conditions for value matching
-        value_conditions = []
-        for (val, chute_id), value in chute_values.items():
-            value_conditions.append(
-                and_(
-                    Deployment.validator == val,
-                    Deployment.chute_id == chute_id,
-                    literal(value, Float),
-                )
+        for chute_id, metric in self.remote_metrics.get(chute.validator, {}).items():
+            instance_count = metric["instance_count"]
+            value_per_instance = (
+                0 if not instance_count else metric["total_usage_usd"] / instance_count
             )
+            chute_values[chute_id] = value_per_instance
 
-        # Subquery to count deployments per chute and validator
-        deployments_per_chute = (
-            select(
-                Deployment.chute_id,
-                Deployment.validator,
-                func.count(Deployment.deployment_id).label("deployment_count"),
-            )
-            .group_by(Deployment.chute_id, Deployment.validator)
+        # Find all servers that support this chute, sorted by cheapest & most already free GPUs.
+        total_gpus_per_server = (
+            select(Server.server_id, func.count(GPU.gpu_id).label("total_gpus"))
+            .select_from(Server)
+            .join(GPU, Server.server_id == GPU.server_id)
+            .where(GPU.model_short_ref.in_(chute.supported_gpus), GPU.verified.is_(True))
+            .group_by(Server.server_id)
             .subquery()
         )
-
-        value_whens = []
-        for (val, chute_id), value in chute_values.items():
-            value_whens.append(
-                (
-                    and_(Deployment.validator == val, Deployment.chute_id == chute_id),
-                    func.cast(1.0 / (func.nullif(literal(value, Float), 0) + 0.1), Float) * 100,
-                )
-            )
-
-        # Main query to find preemptable deployments
+        used_gpus_per_server = (
+            select(Server.server_id, func.count(GPU.gpu_id).label("used_gpus"))
+            .select_from(Server)
+            .join(GPU, Server.server_id == GPU.server_id)
+            .where(GPU.verified.is_(True), GPU.deployment_id.isnot(None))
+            .group_by(Server.server_id)
+            .subquery()
+        )
         query = (
             select(
-                Deployment,
-                deployments_per_chute.c.deployment_count,
+                Server,
+                total_gpus_per_server.c.total_gpus,
+                func.coalesce(used_gpus_per_server.c.used_gpus, 0).label("used_gpus"),
                 (
-                    (100 if not value_whens else case(*value_whens, else_=100))
-                    +
-                    # Bonus for multiple deployments
-                    case((deployments_per_chute.c.deployment_count > 1, 50), else_=0)
-                    +
-                    # Penalty for recent activity
-                    case((Deployment.chute_id.in_(last_invocations.keys()), 0), else_=25)
-                ).label("preemption_score"),
+                    total_gpus_per_server.c.total_gpus
+                    - func.coalesce(used_gpus_per_server.c.used_gpus, 0)
+                ).label("free_gpus"),
             )
-            .join(
-                deployments_per_chute,
-                and_(
-                    Deployment.chute_id == deployments_per_chute.c.chute_id,
-                    Deployment.validator == deployments_per_chute.c.validator,
-                ),
-            )
-            .join(GPU)
+            .select_from(Server)
+            .join(total_gpus_per_server, Server.server_id == total_gpus_per_server.c.server_id)
+            .outerjoin(used_gpus_per_server, Server.server_id == used_gpus_per_server.c.server_id)
+            .join(GPU, Server.server_id == GPU.server_id)
             .where(
-                or_(Deployment.chute_id != chute.chute_id, Deployment.validator != chute.validator),
                 GPU.model_short_ref.in_(chute.supported_gpus),
                 GPU.verified.is_(True),
+                total_gpus_per_server.c.total_gpus >= chute.gpu_count,
             )
-            .group_by(Deployment, deployments_per_chute.c.deployment_count)
-            .having(func.count(GPU.gpu_id) >= chute.gpu_count)
-            .order_by(text("preemption_score DESC"))
-            .limit(1)
+            .order_by(Server.hourly_cost.asc(), text("free_gpus ASC"))
         )
-
         async with get_session() as session:
-            result = (await session.execute(query)).first()
-            if not result:
-                logger.warning(
-                    f"No preemptable deployments found: {chute.chute_id=} {chute.validator=}"
+            servers = (await session.execute(query)).unique().scalars()
+        if not servers:
+            logger.warning(f"No servers in inventory are capable of running {chute.chute_id=}")
+            return
+
+        # Iterate through servers to see if any *could* handle preemption.
+        chute_counts = {}
+        for chute_id, metrics in self.remote_metrics.get(chute.validator, {}).items():
+            chute_counts[chute_id] = metrics.get("instance_count", 0)
+        to_preempt = None
+        target_server = None
+        for server in servers:
+            available_gpus = sum([1 for gpu in server.gpus if not gpu.deployment_id])
+            if available_gpus >= chute.gpu_count:
+                logger.info(
+                    f"Server {server.name} already has {available_gpus=}, no preemption necessary!"
                 )
-                return None
-            deployment = result.Deployment
+                target_server = server
+                break
 
-        score = result.preemption_score
-        if deployment.chute_id in last_invocations:
-            last_invocation = last_invocations[deployment.chute_id]
+            proposed_counts = deepcopy(chute_counts)
+            to_delete = []
+            for deployment in sorted(
+                server.deployments, key=lambda d: chute_values.get(d.chute_id, 0.0)
+            ):
+                # Make sure we aren't pointlessly preempting (already have a deployment in progress).
+                if deployment.chute_id == chute.chute_id:
+                    logger.warning(
+                        f"Attempting to preempt for {chute.chute_id=}, but deployment already exists: {deployment.deployment_id=}"
+                    )
+                    return
+
+                # Can't preempt deployments that haven't been verified yet.
+                if not deployment.verified_at or deployment.chute_id == chute.chute_id:
+                    continue
+
+                # Can't preempt deployments that are <= 5 minutes since verification.
+                age = datetime.now(timezone.utc).replace(
+                    tzinfo=None
+                ) - deployment.verified_at.replace(tzinfo=None)
+                if age <= timedelta(minutes=5):
+                    logger.warning(
+                        f"Cannot preempt {deployment.deployment_id=}, verification age is only {age}"
+                    )
+                    continue
+
+                # If we'd be left with > 1 instance, we can preempt.
+                if proposed_counts.get(deployment.chute_id, 0) > 1:
+                    to_delete.append(deployment.deployment_id)
+                    available_gpus += len(deployment.gpus)
+                    proposed_counts[deployment.chute_id] -= 1
+
+                # Would we reach a sufficient number of free GPUs?
+                if available_gpus >= chute.gpu_count:
+                    logger.info(f"Found a server to preempt deployments on: {server.name}")
+                    to_preempt = to_delete
+                    target_server = server
+                    break
+            if target_server:
+                break
+        if not target_server:
             logger.warning(
-                f"Deployment {deployment.deployment_id} had recent activity: {last_invocation=}, "
-                f"preempting anyways..."
+                f"Could not find a server with sufficient preemptable deployments for {chute.chute_id=}"
             )
+            return
 
-        value = chute_values.get((deployment.validator, deployment.chute_id), 0)
-        logger.info(
-            f"Selected deployment {deployment.deployment_id} for preemption "
-            f"(validator: {deployment.validator}, score: {score}, value: {value:.2f}, "
-            f"last activity: {last_invocations.get(deployment.chute_id, 'unknown')})"
-        )
-        return deployment
+        # Do the preemption.
+        if to_preempt:
+            logger.info(f"Preempting deployments to make room for {chute.chute_id=}: {to_preempt}")
+            for deployment_id in to_preempt:
+                await self.undeploy(deployment_id)
+
+        # Deploy on our target server (which we need to reload from DB).
+        async with get_session() as session:
+            target_server = (
+                (
+                    await session.execute(
+                        select(Server).where(Server.server_id == target_server.server_id)
+                    )
+                )
+                .unique()
+                .scalar_one_or_none()
+            )
+        try:
+            await k8s.kick_cilium(target_server.name)
+            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, target_server)
+            logger.success(
+                f"Successfully deployed {chute.chute_id=} via preemption on {server.server_id=}: {deployment.deployment_id=}"
+            )
+            await self.announce_deployment(deployment)
+        except DeploymentFailure as exc:
+            logger.error(
+                f"Error attempting to deploy {chute.chute_id=} on {server.server_id=} via preemption: {exc}\n{traceback.format_exc()}"
+            )
 
     async def scale_chute(self, chute: Chute, desired_count: int, preempt: bool = False):
         """
@@ -937,23 +964,12 @@ class Gepetto:
                         logger.warning(
                             f"No servers available to accept additional chute deployment: {chute.chute_id}"
                         )
-                        # If no server can accept the new capacity, and pre-empty is true, we need to
-                        # figure out which deployment to remove.
+                        # If no server can accept the new capacity, and preempt is true, we need to
+                        # figure out which deployment(s) to remove.
                         if preempt:
-                            if (
-                                deployment := await self.optimal_preemptable_deployment(chute)
-                            ) is None:
-                                # No deployments are within the scale down time so we can't do anything.
-                                logger.error(
-                                    f"Preempting impossible right now, sorry: {chute.chute_id}"
-                                )
-                                return
-                            logger.info(
-                                f"Removing {deployment.deployment_id=} to make room for {chute.chute_id}"
-                            )
-                            await self.undeploy(deployment.deployment_id)
-                        else:
-                            return
+                            await self.preempting_deploy(chute)
+                        return
+
                     else:
                         logger.info(
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
