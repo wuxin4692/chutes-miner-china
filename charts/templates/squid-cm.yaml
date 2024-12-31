@@ -42,6 +42,8 @@ data:
     .developer.nvidia.com
     .files.pythonhosted.org
     .github.com
+    .githubusercontent.com
+    .objects.githubusercontent.com
     .raw.githubusercontent.com
     .gitlab.com
     .anaconda.org
