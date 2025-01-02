@@ -445,12 +445,6 @@
       loop: "{{ microk8s_services.stdout_lines }}"
       when: container_runtime.changed
 
-    - name: Restart Docker service
-      systemd:
-        name: docker
-        state: restarted
-      when: container_runtime.changed
-
     - name: Patch Cilium ConfigMap to allow NodePort on loopback
       shell: |
         microk8s kubectl patch configmap cilium-config -n kube-system --type merge -p '{"data":{"node-port-bind-protection":"false"}}'
