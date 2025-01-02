@@ -285,7 +285,9 @@ You __*should not*__ announce an axon here!  All communications are done via cli
 
 ### 7. Add your GPU nodes to inventory
 
-Make sure you install `chutes-miner-cli` package.
+The last step in enabling a GPU node in your miner is to use the `add-node` command in the `chutes-miner` CLI.  This calls the miner API, triggers spinning up graval validation services, etc.  This must be run exactly once for each GPU node in order for them to be usable by your miner.
+
+Make sure you install `chutes-miner-cli` package (you can do this on the CPU node, your laptop, wherever):
 ```bash
 pip install chutes-miner-cli
 ```
