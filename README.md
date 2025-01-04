@@ -154,7 +154,7 @@ echo '/home/snap /var/snap none bind 0 0' >> /etc/fstab
 mount -a
 ```
 
-You'll need one non-GPU server (8 cores, 64gb ram minimum) responsible for running postgres, redis, gepetto, and API components (not chutes), and __*ALL*__ of the GPU servers 😄
+You'll need one non-GPU server (8 cores, 64gb ram minimum) responsible for running postgres, redis, gepetto, and API components (not chutes), and __*ALL*__ of the GPU servers 😄 (just kidding of course, you can use as many or as few as you wish)
 
 [The list of supported GPUs can be found here](https://github.com/rayonlabs/chutes-api/blob/main/api/gpu.py)
 
