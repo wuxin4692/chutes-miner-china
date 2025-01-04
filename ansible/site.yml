@@ -152,7 +152,7 @@
         - name: Download and install CUDA keyring
           block:
             - get_url:
-                url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+                url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{{ ubuntu_major }}{{ ubuntu_minor }}/x86_64/cuda-keyring_1.1-1_all.deb
                 dest: /tmp/cuda-keyring.deb
             - apt:
                 deb: /tmp/cuda-keyring.deb
@@ -167,8 +167,21 @@
               - cuda-toolkit-12-6
               - nvidia-open-560
               - nvidia-fabricmanager-560
+            state: present
+
+        - name: Install NVIDIA optimized kernel for 22.04
+          apt:
+            name:
               - linux-nvidia-hwe-22.04
             state: present
+          when: ubuntu_major == "22"
+
+        - name: Install NVIDIA optimized kernel for 24.04
+          apt:
+            name:
+              - linux-nvidia-hwe-24.04-edge
+            state: present
+          when: ubuntu_major == "24"
 
         - name: Configure NVIDIA Fabric Manager
           systemd:
@@ -283,19 +296,6 @@
       shell: microk8s status | grep "microk8s is running" || microk8s start
       changed_when: false
 
-    - name: Configure CNI
-      template:
-        src: cilium.conf.j2
-        dest: /etc/cni/net.d/05-cilium.conf
-        mode: '0600'
-      register: cni_updated
-
-    - name: Enable cilium
-      shell: |
-        microk8s enable community || (sleep 10 && microk8s enable community) || true
-        microk8s enable cilium || (sleep 10 && microk8s enable cilium) || true
-      when: cni_updated.changed
-
     - name: Configure wireguard IP for k8s comms
       block:
         - name: Get current kubelet args
@@ -320,12 +320,6 @@
             name: snap.microk8s.daemon-kubelite
             state: restarted
           when: kubelet_modified.changed
-
-    - name: Install kubernetes python package
-      pip:
-        name: kubernetes
-        state: present
-      become: yes
 
     - name: Setup Kubernetes access for user
       block:
@@ -394,6 +388,38 @@
         content: "{{ inventory_hostname }}"
         dest: /etc/hostname
 
+    - name: Create hostname script
+      copy:
+        dest: /usr/local/bin/set-hostname.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          hostname "{{ inventory_hostname }}"
+          echo -n "{{ inventory_hostname }}" > /etc/hostname
+
+    - name: Create systemd service
+      copy:
+        dest: /etc/systemd/system/set-hostname.service
+        content: |
+          [Unit]
+          Description=Set system hostname on boot
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/set-hostname.sh
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start service
+      systemd:
+        name: set-hostname
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
     - name: Reboot
       reboot:
         msg: "Rebooting..."
@@ -403,7 +429,7 @@
         pre_reboot_delay: 0
         post_reboot_delay: 30
         test_command: uptime
-      when: gpu_setup.changed or cni_updated.changed
+      when: gpu_setup.changed
       register: rebooted
 
     - name: Wait for system to be ready
@@ -444,11 +470,6 @@
         state: restarted
       loop: "{{ microk8s_services.stdout_lines }}"
       when: container_runtime.changed
-
-    - name: Patch Cilium ConfigMap to allow NodePort on loopback
-      shell: |
-        microk8s kubectl patch configmap cilium-config -n kube-system --type merge -p '{"data":{"node-port-bind-protection":"false"}}'
-      when: is_primary | bool
 
     - name: Install iptables-persistent
       package:

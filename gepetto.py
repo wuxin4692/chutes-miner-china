@@ -949,7 +949,6 @@ class Gepetto:
                 .scalar_one_or_none()
             )
         try:
-            await k8s.kick_cilium(target_server.name)
             deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, target_server)
             logger.success(
                 f"Successfully deployed {chute.chute_id=} via preemption on {server.server_id=}: {deployment.deployment_id=}"
@@ -1010,7 +1009,6 @@ class Gepetto:
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
                         )
                         try:
-                            await k8s.kick_cilium(server.name)
                             deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
                             logger.success(
                                 f"Successfully deployed {chute.chute_id=} on {server.server_id=}: {deployment.deployment_id=}"

@@ -18,6 +18,9 @@ all:
     ansible_ssh_common_args: '-o ControlPath=none'
     # SSH retries...
     ansible_ssh_retries: 3
+    # Ubuntu major/minor version.
+    ubuntu_major: "22"
+    ubuntu_minor: "04"
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.

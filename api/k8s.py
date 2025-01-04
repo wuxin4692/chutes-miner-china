@@ -30,7 +30,6 @@ from kubernetes.client import (
     V1HostPathVolumeSource,
     V1SecurityContext,
     V1EmptyDirVolumeSource,
-    V1DeleteOptions,
 )
 from kubernetes.client.rest import ApiException
 from sqlalchemy import select
@@ -569,23 +568,3 @@ async def deploy_chute(chute: Chute, server: Server):
         raise DeploymentFailure(
             f"Failed to deploy chute {chute.chute_id} with version {chute.version}: {exc}\n{traceback.format_exc()}"
         )
-
-
-async def kick_cilium(node_name: str):
-    """
-    Restart cilium on a node.  This is really obnoxious, need to debug...
-    """
-    pod_list = k8s_core_client().list_namespaced_pod(
-        namespace="kube-system",
-        label_selector="k8s-app=cilium",
-    )
-    target_pod = None
-    for pod in pod_list.items:
-        if pod.spec.node_name == node_name:
-            target_pod = pod
-            break
-    if not target_pod:
-        return
-    k8s_core_client().delete_namespaced_pod(
-        name=target_pod.metadata.name, namespace="kube-system", body=V1DeleteOptions()
-    )
