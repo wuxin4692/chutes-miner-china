@@ -21,7 +21,6 @@ from kubernetes.client import (
     V1ServiceSpec,
     V1ServicePort,
     V1Probe,
-    V1HTTPGetAction,
     V1EnvVar,
     V1Volume,
     V1VolumeMount,
@@ -30,6 +29,7 @@ from kubernetes.client import (
     V1HostPathVolumeSource,
     V1SecurityContext,
     V1EmptyDirVolumeSource,
+    V1ExecAction,
 )
 from kubernetes.client.rest import ApiException
 from sqlalchemy import select
@@ -488,7 +488,13 @@ async def deploy_chute(chute: Chute, server: Server):
                             ],
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
-                                http_get=V1HTTPGetAction(path="/_alive", port=8000),
+                                exec=V1ExecAction(
+                                    command=[
+                                        "/bin/sh",
+                                        "-c",
+                                        "curl -f http://127.0.0.1:8000/_alive || exit 1",
+                                    ]
+                                ),
                                 initial_delay_seconds=15,
                                 period_seconds=10,
                                 timeout_seconds=1,
