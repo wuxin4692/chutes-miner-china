@@ -59,10 +59,14 @@ It is often the case that you'll want CPU instances on one provider (AWS, Google
 
 By installing Wireguard, your kubernetes cluster can span any number of providers without issue.
 
+*__this is installed and configured automatically by ansible scripts__*
+
 #### ☸️ Kubernetes
 
 The entirety of the chutes miner must run within a [kubernetes](https://kubernetes.io/)  While not strictly necessary, we recommend using microk8s (which is all handled automatically from the ansible scripts).
 If you choose to not use microk8s, you must also modify or not use the provided ansible scripts.
+
+*__this is installed and configured automatically by ansible scripts__*
 
 ### 🧩 Miner Components
 
@@ -72,9 +76,13 @@ If you choose to not use microk8s, you must also modify or not use the provided 
 
 We make heavy use of SQLAlchemy/postgres throughout chutes.  All servers, GPUs, deployments, etc., are tracked in postgresql which is deployed as a statefulset with a persistent volume claim within your kubernetes cluster.
 
+*__this is installed and configured automatically when deploying via helm charts__*
+
 #### 🔄 Redis
 
 Redis is primarily used for it's pubsub functionality within the miner.  Events (new chute added to validator, GPU added to the system, chute removed, etc.) trigger pubsub messages within redis, which trigger the various event handlers in code.
+
+*__this is installed and configured automatically when deploying via helm charts__*
 
 #### ✅ GraVal bootstrap
 
@@ -86,6 +94,8 @@ All traffic sent to instances on chutes network are encrypted with keys that can
 When you add a new node to your kubernetes cluster, each GPU on the server must be verified with the GraVal package, so a bootstrap server is deployed to accomplish this (automatically, no need to fret).
 
 Each time a chute starts/gets deployed, it also needs to run GraVal to calculate the decryption key that will be necessary for the GPU(s) the chute is deployed on.
+
+*__this is done automatically__*
 
 #### 🔀 Registry proxy
 
@@ -101,11 +111,15 @@ The miner API code that injects the signatures is here: https://github.com/rayon
 
 Nginx then proxies the request upstream back to the validator in question (based on the hotkey as part of the subdomain), which validates the signatures and replaces those headers with basic auth that can be used with our self-hosted registry: https://github.com/rayonlabs/chutes-api/blob/main/api/registry/router.py
 
+*__this is installed and configured automatically when deploying via helm charts__*
+
 #### 🦑 Squid proxy
 
 In order to prevent some amount of abuse of the platform, chutes are limited to HTTPS traffic, and only through a squid proxy. The squid proxy server does not currently cache, rather it's used to filter the list of upstream domains the chutes are allowed to connect to, e.g. huggingface, S3, etc.
 
 The list of allowed domains will change over time, but can be found in the configmap within the charts directory [here](/charts/templates/squid-cm.yaml)
+
+*__this is installed and configured automatically when deploying via helm charts__*
 
 #### ⚡ API
 
@@ -113,6 +127,8 @@ Each miner runs an API service, which does a variety of things including:
 - server/inventory management
 - websocket connection to the validator API
 - docker image registry authentication
+
+*__this is installed and configured automatically when deploying via helm charts__*
 
 #### 🧙‍♂️ Gepetto
 
