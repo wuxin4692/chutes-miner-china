@@ -488,7 +488,7 @@ async def deploy_chute(chute: Chute, server: Server):
                             ],
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
-                                exec=V1ExecAction(
+                                _exec=V1ExecAction(
                                     command=[
                                         "/bin/sh",
                                         "-c",
