@@ -378,6 +378,17 @@
         dest: "/var/snap/microk8s/current/args/certs.d/{{ registry_hostname }}:{{ registry_port }}/hosts.toml"
         mode: '0644'
 
+    - name: Update DNS resolution config
+      template:
+        src: resolved.conf.j2
+        dest: "/etc/systemd/resolved.conf"
+        mode: '0644'
+
+    - name: Restart systemd-resolved
+      systemd:
+        name: systemd-resolved
+        state: restarted
+
     - name: Set hostname
       hostname:
         name: "{{ inventory_hostname }}"
