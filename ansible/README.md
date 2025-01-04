@@ -16,7 +16,7 @@ Then install ansible:
 brew install ansible
 ```
 
-### Ubuntu/aptitude based systems
+### Ubuntu/Ubuntu (WSL)/aptitude based systems
 
 ```bash
 sudo apt update && apt -y install -y ansible python3-pip
