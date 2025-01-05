@@ -154,6 +154,15 @@ echo '/home/snap /var/snap none bind 0 0' >> /etc/fstab
 mount -a
 ```
 
+#### Important networking note!
+
+Before starting, you must either disable all layers of firewalls (if you like to live dangerously), or enable the following:
+- allow all traffic (all ports, all protos inc. UDP) between all nodes in your inventory
+- allow the kubernetes ephemeral port range on all of your GPU nodes, since the ports for chute deployments will be random, in that range, and need public accessibility - the default port range is 30000-32767
+- allow access to the various nodePort values in your API from whatever machine you are managing/running chutes-miner add-node/etc., or just make it public (particularly import is the API node port, which defaults to 32000)
+
+The primary CPU node, which the other nodes connect to as the wireguard primary, needs to have IP forwarding enabled -- if your node is in GCP, for example, there's a checkbox you need to enable for IP forwarding.
+
 You'll need one non-GPU server (8 cores, 64gb ram minimum) responsible for running postgres, redis, gepetto, and API components (not chutes), and __*ALL*__ of the GPU servers 😄 (just kidding of course, you can use as many or as few as you wish)
 
 [The list of supported GPUs can be found here](https://github.com/rayonlabs/chutes-api/blob/main/api/gpu.py)
