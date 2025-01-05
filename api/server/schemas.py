@@ -18,6 +18,7 @@ class ServerArgs(BaseModel):
     gpu_short_ref: Literal[
         "3090",
         "4090",
+        "a4000",
         "a5000",
         "a6000",
         "a6000_ada",
