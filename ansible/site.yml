@@ -126,6 +126,20 @@
         - lambda_version_file.stat.exists or lambda_file_backup.stat.exists
         - lambda_packages.stdout_lines | length > 0
 
+    - name: Install NVIDIA optimized kernel for 22.04
+      apt:
+        name:
+          - linux-nvidia-hwe-22.04
+        state: present
+      when: ubuntu_major == "22" and enable_gpu | bool
+
+    - name: Install NVIDIA optimized kernel for 24.04
+      apt:
+        name:
+          - linux-nvidia-hwe-24.04-edge
+        state: present
+      when: ubuntu_major == "24" and enable_gpu | bool
+
     - name: Check CUDA installation
       apt:
         name: cuda-toolkit-12-6
@@ -168,20 +182,6 @@
               - nvidia-open-560
               - nvidia-fabricmanager-560
             state: present
-
-        - name: Install NVIDIA optimized kernel for 22.04
-          apt:
-            name:
-              - linux-nvidia-hwe-22.04
-            state: present
-          when: ubuntu_major == "22"
-
-        - name: Install NVIDIA optimized kernel for 24.04
-          apt:
-            name:
-              - linux-nvidia-hwe-24.04-edge
-            state: present
-          when: ubuntu_major == "24"
 
         - name: Configure NVIDIA Fabric Manager
           systemd:
