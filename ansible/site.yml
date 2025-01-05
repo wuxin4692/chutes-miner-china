@@ -399,6 +399,16 @@
         content: "{{ inventory_hostname }}"
         dest: /etc/hostname
 
+    - name: Ensure preserve_hostname is set to true
+      lineinfile:
+        path: /etc/cloud/cloud.cfg
+        regexp: '^preserve_hostname:'
+        line: 'preserve_hostname: true'
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+
     - name: Create hostname script
       copy:
         dest: /usr/local/bin/set-hostname.sh
@@ -446,6 +456,14 @@
     - name: Wait for system to be ready
       wait_for_connection:
         timeout: 600
+      when: rebooted.changed
+
+    - name: Set hostname again just in case
+      systemd:
+        name: set-hostname
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
       when: rebooted.changed
 
     - name: Wait for microk8s to be ready
