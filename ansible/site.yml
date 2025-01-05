@@ -151,7 +151,9 @@
 
     - name: Purge existing NVIDIA/CUDA packages
       shell: |
-        PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | egrep -v 'linux-nvidia|linux-modules-nvidia-fs' | awk '{print $2}')
+        export DEBIAN_FRONTEND=noninteractive
+        export NEEDRESTART_SUSPEND=y
+        PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | egrep -v 'nvidia-kernel|linux-(nvidia|modules|headers|image)' | awk '{print $2}' )
         if [ ! -z "$PKGS" ]; then
           echo "$PKGS" | xargs apt -y remove --allow-change-held-packages
           echo "$PKGS" | xargs dpkg --purge
@@ -182,6 +184,20 @@
               - nvidia-open-560
               - nvidia-fabricmanager-560
             state: present
+
+        - name: Verify HWE kernel is still installed
+          apt:
+            name:
+              - linux-nvidia-hwe-22.04
+            state: present
+          when: ubuntu_major == "22" and enable_gpu | bool
+
+        - name: Install NVIDIA optimized kernel for 24.04
+          apt:
+            name:
+              - linux-nvidia-hwe-24.04-edge
+            state: present
+          when: ubuntu_major == "24" and enable_gpu | bool
 
         - name: Configure NVIDIA Fabric Manager
           systemd:
