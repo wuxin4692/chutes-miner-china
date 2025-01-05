@@ -151,7 +151,7 @@
 
     - name: Purge existing NVIDIA/CUDA packages
       shell: |
-        PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | grep -v 'linux-nvidia' | awk '{print $2}')
+        PKGS=$(dpkg --list | egrep -i 'cuda|nvidia' | egrep -v 'linux-nvidia|linux-modules-nvidia-fs' | awk '{print $2}')
         if [ ! -z "$PKGS" ]; then
           echo "$PKGS" | xargs apt -y remove --allow-change-held-packages
           echo "$PKGS" | xargs dpkg --purge
