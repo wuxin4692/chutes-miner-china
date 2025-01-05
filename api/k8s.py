@@ -51,20 +51,30 @@ async def get_kubernetes_nodes() -> List[Dict]:
         node_list = k8s_core_client().list_node(field_selector=None, label_selector="chutes/worker")
         for node in node_list.items:
             gpu_count = int(node.status.capacity["nvidia.com/gpu"])
+            gpu_mem_mb = int(node.metadata.labels.get("nvidia.com/gpu.memory", "32"))
+            gpu_mem_gb = int(gpu_mem_mb / 1024)
+            cpu_count = (
+                int(node.status.capacity["cpu"]) - 2
+            )  # leave 2 CPUs for incidentals, daemon sets, etc.
+            cpus_per_gpu = (
+                1 if cpu_count <= gpu_count else min(4, math.floor(cpu_count / gpu_count))
+            )
+            total_memory_gb = (
+                int(int(node.status.capacity["memory"].replace("Ki", "")) / 1024 / 1024) - 2
+            )  # ditto, leave some free
+            memory_gb_per_gpu = (
+                1
+                if total_memory_gb <= gpu_count
+                else min(gpu_mem_gb + 1, math.floor(total_memory_gb / gpu_count))
+            )
             node_info = {
                 "name": node.metadata.name,
                 "validator": node.metadata.labels.get("chutes/validator"),
                 "server_id": node.metadata.uid,
                 "status": node.status.phase,
                 "ip_address": node.metadata.labels.get("chutes/external-ip"),
-                "cpu_per_gpu": math.floor(int(node.status.capacity["cpu"]) / gpu_count) - 1 or 1,
-                "memory_gb_per_gpu": int(
-                    math.floor(int(node.status.capacity["memory"].replace("Ki", "")) / gpu_count)
-                    / 1024
-                    / 1024
-                )
-                - 1
-                or 1,
+                "cpu_per_gpu": cpus_per_gpu,
+                "memory_gb_per_gpu": memory_gb_per_gpu,
             }
             nodes.append(node_info)
     except Exception as e:

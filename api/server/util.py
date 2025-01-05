@@ -337,16 +337,20 @@ async def track_server(
         raise ValueError(f"Node is not yet ready [{status=}]")
 
     # Calculate CPU/RAM per GPU for allocation purposes.
-    gpu_count = int(node_object.metadata.labels["nvidia.com/gpu.count"])
-    cpu_per_gpu = math.floor(int(node_object.status.capacity["cpu"]) / gpu_count) - 1 or 1
+    gpu_count = int(node_object.status.capacity["nvidia.com/gpu"])
+    gpu_mem_mb = int(node_object.metadata.labels.get("nvidia.com/gpu.memory", "32"))
+    gpu_mem_gb = int(gpu_mem_mb / 1024)
+    cpu_count = (
+        int(node_object.status.capacity["cpu"]) - 2
+    )  # leave 2 CPUs for incidentals, daemon sets, etc.
+    cpu_per_gpu = 1 if cpu_count <= gpu_count else min(4, math.floor(cpu_count / gpu_count))
+    total_memory_gb = (
+        int(int(node_object.status.capacity["memory"].replace("Ki", "")) / 1024 / 1024) - 2
+    )  # ditto, leave some free
     memory_per_gpu = (
-        int(
-            math.floor(int(node_object.status.capacity["memory"].replace("Ki", "")) / gpu_count)
-            / 1024
-            / 1024
-        )
-        - 2
-        or 1
+        1
+        if total_memory_gb <= gpu_count
+        else min(gpu_mem_gb + 4, math.floor(total_memory_gb / gpu_count))
     )
 
     # Track the server in our inventory.
