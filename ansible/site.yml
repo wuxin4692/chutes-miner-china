@@ -4,7 +4,7 @@
   any_errors_fatal: true
   vars:
     username: "{{ user }}"
-    ssh_public_key: "{{ ssh_key }}"
+    ssh_public_keys: "{{ ssh_keys }}"
     microk8s_channel: "1.31/stable"
     enable_gpu: "{{ gpu_enabled | default(false) }}"
 
@@ -41,13 +41,12 @@
         - "/root/.ssh"
 
     - name: Add authorized SSH keys
-      copy:
-        content: "{{ ssh_public_key }}"
-        dest: "{{ item }}"
-        mode: '0700'
-      with_items:
-        - "/home/{{ username }}/.ssh/authorized_keys"
-        - "/root/.ssh/authorized_keys"
+      authorized_key:
+        user: "{{ user }}"
+        state: present
+        key: "{{ item }}"
+      with_items: "{{ ssh_public_keys }}"
+      become: yes
 
     - name: Set correct ownership for user home
       file:
