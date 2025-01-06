@@ -207,7 +207,7 @@ Install helm on the same local/management machine: https://helm.sh/docs/intro/in
 
 ### 3. Configure your environment
 
-Be sure to thoroughly examine [values](chart/values.yaml) and update according to your particular environment.
+Be sure to thoroughly examine [values](charts/values.yaml) and update according to your particular environment.
 
 Primary sections to update:
 
