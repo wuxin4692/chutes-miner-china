@@ -98,7 +98,7 @@ This step will install nvidia GPU operator and prometheus on your servers.
 
 You need to run this one time only!
 ```bash
-ansible-playbook -i inventory.yml extras.yaml
+ansible-playbook -i inventory.yml extras.yml
 ```
 
 ## To add a new node, after the fact
