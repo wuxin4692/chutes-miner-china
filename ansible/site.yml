@@ -302,6 +302,61 @@
         enabled: yes
         state: started
 
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+        use: systemd
+
+    - name: Update /etc/hostname
+      copy:
+        content: "{{ inventory_hostname }}"
+        dest: /etc/hostname
+
+    - name: Ensure preserve_hostname is set to true
+      lineinfile:
+        path: /etc/cloud/cloud.cfg
+        regexp: '^preserve_hostname:'
+        line: 'preserve_hostname: true'
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create hostname script
+      copy:
+        dest: /usr/local/bin/set-hostname.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          hostname "{{ inventory_hostname }}"
+          echo -n "{{ inventory_hostname }}" > /etc/hostname
+
+    - name: Create systemd service
+      copy:
+        dest: /etc/systemd/system/set-hostname.service
+        content: |
+          [Unit]
+          Description=Set system hostname on boot
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/set-hostname.sh
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start service
+      systemd:
+        name: set-hostname
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Set hostname one more time with hostnamectl
+      shell: hostnamectl set-hostname {{ inventory_hostname }}
+
     - name: Install MicroK8s
       community.general.snap:
         name: microk8s
@@ -404,58 +459,6 @@
       systemd:
         name: systemd-resolved
         state: restarted
-
-    - name: Set hostname
-      hostname:
-        name: "{{ inventory_hostname }}"
-        use: systemd
-
-    - name: Update /etc/hostname
-      copy:
-        content: "{{ inventory_hostname }}"
-        dest: /etc/hostname
-
-    - name: Ensure preserve_hostname is set to true
-      lineinfile:
-        path: /etc/cloud/cloud.cfg
-        regexp: '^preserve_hostname:'
-        line: 'preserve_hostname: true'
-        create: true
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Create hostname script
-      copy:
-        dest: /usr/local/bin/set-hostname.sh
-        mode: '0755'
-        content: |
-          #!/bin/bash
-          hostname "{{ inventory_hostname }}"
-          echo -n "{{ inventory_hostname }}" > /etc/hostname
-
-    - name: Create systemd service
-      copy:
-        dest: /etc/systemd/system/set-hostname.service
-        content: |
-          [Unit]
-          Description=Set system hostname on boot
-          After=network.target
-
-          [Service]
-          Type=oneshot
-          ExecStart=/usr/local/bin/set-hostname.sh
-          RemainAfterExit=yes
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: Enable and start service
-      systemd:
-        name: set-hostname
-        enabled: yes
-        state: started
-        daemon_reload: yes
 
     - name: Reboot
       reboot:

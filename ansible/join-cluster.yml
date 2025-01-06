@@ -40,7 +40,6 @@
 
     - name: Hostnamectl hostname
       shell: hostnamectl set-hostname {{ inventory_hostname }}
-      when: is_primary | bool
 
     - name: Enable and start service
       systemd:
