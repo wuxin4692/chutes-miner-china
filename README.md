@@ -27,6 +27,7 @@ We've tried to automate the bulk of the process via ansible, helm/kubernetes, so
    - [Update Gepetto with Your Optimized Strategy](#4-update-gepetto-with-your-optimized-strategy)
    - [Deploy the Miner within Your Kubernetes Cluster](#5-deploy-the-miner-within-your-kubernetes-cluster)
    - [Register](#6-register)
+- [Adding to your miner inventory](#-adding-servers)
 
 ## ⛏️ TL;DR
 
@@ -336,3 +337,9 @@ chutes-miner add-node \
 - `--miner-api` is the base URL to your miner API service, which will be http://[non-GPU node IP]:[minerAPI port, default 32000], i.e. find the public/external IP address of your CPU-only node, and whatever port you configured for the API service (which is 32000 if you didn't change the default).
 
 You can add additional GPU nodes at any time by simply updating inventory.yaml and rerunning the `site.yaml` and `join-cluster.yaml` playbooks: [ansible readme](/ansible/README.md#to-add-a-new-node-after-the-fact)
+
+## ➕ Adding servers
+
+To expand your miner's inventory, you should bootstrap them with the ansible scripts, specifically the site and join-cluster bits.  Info for the ansible portions [here](/ansible/README.md#to-add-a-new-node-after-the-fact)
+
+Then, run the `chutes-miner add-node ...` command above.
