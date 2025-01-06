@@ -147,7 +147,7 @@ ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc
 
 ### Important RAM note!
 
-It is very important to have as much RAM (or very close to it) per GPU as VRAM.  This means, for example, if you are using a server with 4x a40 GPUs (48GB VRAM), the server must have >= 48 * 4 = 192 GB of RAM!
+It is very important to have as much RAM (or very close to it) per GPU as VRAM.  This means, for example, if you are using a server with 4x a40 GPUs (48GB VRAM), the server must have >= 48 * 4 = 192 GB of RAM!  If you do not have at least as much RAM per GPU as VRAM, deployments are likely to fail and your servers will not be properly utilized.
 
 #### Important storage note!
 
