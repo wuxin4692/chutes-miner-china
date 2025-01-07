@@ -77,7 +77,7 @@ class Gepetto:
         """
         Refresh images/chutes from validator(s).
         """
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(raise_For_status=True) as session:
             headers, _ = sign_request(purpose="miner")
             updated_items = {}
             async with session.get(url, headers=headers) as resp:
@@ -86,7 +86,8 @@ class Gepetto:
                     if content.startswith("data: "):
                         data = json.loads(content[6:])
                         updated_items[data[id_key]] = data
-            pointer[hotkey] = updated_items
+            if updated_items:
+                pointer[hotkey] = updated_items
 
     async def remote_refresh_all(self):
         """
@@ -1137,11 +1138,12 @@ class Gepetto:
                     logger.warning(
                         f"GPU {gpu.gpu_id} is no longer in validator {gpu.validator} inventory"
                     )
-                    tasks.append(
-                        asyncio.create_task(
-                            self.gpu_deleted({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
-                        )
-                    )
+                    # XXX we need this reconsiliation somehow, but API downtime is really problematic here...
+                    # tasks.append(
+                    #     asyncio.create_task(
+                    #         self.gpu_deleted({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
+                    #     )
+                    # )
 
             # GPUs in validator inventory that don't exist locally.
             for validator_hotkey, nodes in self.remote_nodes.items():
@@ -1150,8 +1152,9 @@ class Gepetto:
                         logger.warning(
                             f"Found GPU in inventory of {validator_hotkey} that is not local: {gpu_id}"
                         )
-                        if (validator := validator_by_hotkey(validator_hotkey)) is not None:
-                            await self.remove_gpu_from_validator(validator, gpu_id)
+                        # XXX also want to reconsile these, but vali downtime = really bad here...
+                        # if (validator := validator_by_hotkey(validator_hotkey)) is not None:
+                        #     await self.remove_gpu_from_validator(validator, gpu_id)
 
             # Chutes that were removed/outdated.
             async for row in await session.stream(select(Chute)):
