@@ -345,12 +345,12 @@ async def track_server(
     )  # leave 2 CPUs for incidentals, daemon sets, etc.
     cpu_per_gpu = 1 if cpu_count <= gpu_count else min(4, math.floor(cpu_count / gpu_count))
     total_memory_gb = (
-        int(int(node_object.status.capacity["memory"].replace("Ki", "")) / 1024 / 1024) - 2
+        int(int(node_object.status.capacity["memory"].replace("Ki", "")) / 1024 / 1024) - 6
     )  # ditto, leave some free
     memory_per_gpu = (
         1
         if total_memory_gb <= gpu_count
-        else min(gpu_mem_gb + 4, math.floor(total_memory_gb / gpu_count))
+        else min(gpu_mem_gb, math.floor(total_memory_gb * 0.8 / gpu_count))
     )
 
     # Track the server in our inventory.
