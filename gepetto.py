@@ -77,7 +77,7 @@ class Gepetto:
         """
         Refresh images/chutes from validator(s).
         """
-        async with aiohttp.ClientSession(raise_For_status=True) as session:
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, _ = sign_request(purpose="miner")
             updated_items = {}
             async with session.get(url, headers=headers) as resp:
