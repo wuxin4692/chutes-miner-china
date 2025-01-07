@@ -30,25 +30,6 @@
         - not (is_primary | bool)
         - ping_result.failed
 
-- name: Double check the hostname
-  hosts: all
-  tasks:
-    - name: Get current hostname
-      ansible.builtin.command: hostname
-      register: current_hostname
-      changed_when: false
-
-    - name: Hostnamectl hostname
-      shell: hostnamectl set-hostname {{ inventory_hostname }}
-
-    - name: Enable and start service
-      systemd:
-        name: set-hostname
-        enabled: yes
-        state: restarted
-        daemon_reload: yes
-      when: current_hostname.stdout != inventory_hostname
-
 - name: Get join command from primary node
   hosts: all
   tasks:
