@@ -15,6 +15,7 @@ RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/relea
 USER chutes
 ADD --chown=chutes README.md /app/README.md
 ADD --chown=chutes pyproject.toml poetry.lock /app/
+ADD --chown=chutes gepetto.py /app/gepetto.py
 WORKDIR /app
 RUN poetry install --no-root
 ADD --chown=chutes api /app/api

@@ -35,6 +35,9 @@ def add_node(
                 data=payload_string,
                 timeout=900,
             ) as resp:
+                if resp.status != 200:
+                    print(f"\033[31mError adding node:\n{await resp.text()}\033[0m")
+                    resp.raise_for_status()
                 async for content in resp.content:
                     if content.strip():
                         payload = json.loads(content.decode()[6:])
@@ -65,8 +68,31 @@ def delete_node(
     asyncio.run(_delete_node())
 
 
+def purge_deployments(
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL"),
+):
+    """
+    Rebalance all chutes - this just deletes all current instances and let's gepetto re-scale for max $$$
+    """
+
+    async def _purge_deployments():
+        nonlocal hotkey, miner_api
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, payload_string = sign_request(hotkey, purpose="management")
+            async with session.delete(
+                f"{miner_api.rstrip('/')}/deployments/purge",
+                headers=headers,
+            ) as resp:
+                print(json.dumps(await resp.json(), indent=2))
+
+    asyncio.run(_purge_deployments())
+
+
 app.command(name="add-node", help="Add a new kubernetes node to your cluster")(add_node)
 app.command(name="delete-node", help="Delete a kubernetes node from your cluster")(delete_node)
+app.command(name="purge-deployments", help="Purge all deployments, allowing autoscale from scratch")(purge_deployments)
+
 
 if __name__ == "__main__":
     app()
