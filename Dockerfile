@@ -13,9 +13,10 @@ USER root
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl /usr/local/bin/ && chmod 755 /usr/local/bin/kubectl
 RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 && chmod +x /usr/local/bin/dbmate
 USER chutes
+ADD --chown=chutes README.md /app/README.md
 ADD --chown=chutes pyproject.toml poetry.lock /app/
 WORKDIR /app
-RUN poetry install
+RUN poetry install --no-root
 ADD --chown=chutes api /app/api
 ADD --chown=chutes audit_exporter.py /app/audit_exporter.py
 ENV PYTHONPATH=/app
@@ -48,5 +49,5 @@ RUN curl -sSL https://install.python-poetry.org | python -
 ENV PATH=$PATH:/home/chutes/.local/bin
 ADD --chown=chutes graval_bootstrap /app
 WORKDIR /app
-RUN poetry install
+RUN poetry install --no-root
 ENTRYPOINT poetry run python bootstrap.py --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58

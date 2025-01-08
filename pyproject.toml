@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "chutes.ai miner API"
 authors = ["Jon Durbin <jon@jondurbin.com>", "namoray <namoray@rayonlabs.ai>"]
 license = "MIT"
-readme = "../README.md"
+readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"

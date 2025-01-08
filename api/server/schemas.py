@@ -33,6 +33,7 @@ class ServerArgs(BaseModel):
         "a100_sxm",
         "h100",
         "h100_sxm",
+        "h200",
     ] = Field(description="GPU model identifier")
 
 
