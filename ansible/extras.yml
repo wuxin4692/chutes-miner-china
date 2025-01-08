@@ -24,7 +24,8 @@
           --set toolkit.enabled=true \
           --set devicePlugin.enabled=true \
           --set operator.runtimeClass="nvidia-container-runtime" \
-          --set operator.defaultRuntime=containerd
+          --set operator.defaultRuntime=containerd \
+          --set containerRuntime.socketPath=/var/snap/microk8s/common/run/containerd.sock
       when: is_primary | bool
 
 - name: Install Prometheus
