@@ -9,11 +9,6 @@
     enable_gpu: "{{ gpu_enabled | default(false) }}"
 
   tasks:
-    - name: Set environment variables
-      shell: |
-        export DEBIAN_FRONTEND=noninteractive
-        export NEEDRESTART_SUSPEND=y
-
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -93,6 +88,8 @@
           - rsyslog
           - libpq-dev
           - snapd
+          - iputils-ping
+          - systemd-timesyncd
         state: present
 
     - name: Set vim as default editor
@@ -125,23 +122,9 @@
         - lambda_version_file.stat.exists or lambda_file_backup.stat.exists
         - lambda_packages.stdout_lines | length > 0
 
-    - name: Install NVIDIA optimized kernel for 22.04
-      apt:
-        name:
-          - linux-nvidia-hwe-22.04
-        state: present
-      when: ubuntu_major == "22" and enable_gpu | bool
-
-    - name: Install NVIDIA optimized kernel for 24.04
-      apt:
-        name:
-          - linux-nvidia-hwe-24.04-edge
-        state: present
-      when: ubuntu_major == "24" and enable_gpu | bool
-
     - name: Check CUDA installation
       apt:
-        name: cuda-toolkit-12-6
+        name: cuda-toolkit-{{ cuda_version }}
         state: present
       check_mode: yes
       register: cuda_check
@@ -159,44 +142,32 @@
         fi
       ignore_errors: yes
       register: gpu_setup
-      when: (gpu_enabled | bool) and (cuda_check.failed or cuda_check.changed)
+      when: not skip_cuda | bool and (gpu_enabled | bool) and (cuda_check.failed or cuda_check.changed)
+
+    - name: Download and install CUDA keyring
+      block:
+        - get_url:
+            url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{{ ubuntu_major }}{{ ubuntu_minor }}/x86_64/cuda-keyring_1.1-1_all.deb
+            dest: /tmp/cuda-keyring.deb
+        - apt:
+            deb: /tmp/cuda-keyring.deb
+      when: gpu_enabled | bool
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      when: gpu_enabled | bool
 
     - name: GPU Setup Tasks
-      when: enable_gpu | bool
+      when: enable_gpu | bool and not skip_cuda | bool
       block:
-        - name: Download and install CUDA keyring
-          block:
-            - get_url:
-                url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{{ ubuntu_major }}{{ ubuntu_minor }}/x86_64/cuda-keyring_1.1-1_all.deb
-                dest: /tmp/cuda-keyring.deb
-            - apt:
-                deb: /tmp/cuda-keyring.deb
-
-        - name: Update apt cache
-          apt:
-            update_cache: yes
-
         - name: Install NVIDIA packages
           apt:
             name:
-              - cuda-toolkit-12-6
-              - nvidia-open-560
-              - nvidia-fabricmanager-560
+              - cuda-toolkit-{{ cuda_version }}
+              - cuda-drivers-{{ nvidia_version }}
+              - nvidia-fabricmanager-{{ nvidia_version }}
             state: present
-
-        - name: Verify HWE kernel is still installed
-          apt:
-            name:
-              - linux-nvidia-hwe-22.04
-            state: present
-          when: ubuntu_major == "22" and enable_gpu | bool
-
-        - name: Install NVIDIA optimized kernel for 24.04
-          apt:
-            name:
-              - linux-nvidia-hwe-24.04-edge
-            state: present
-          when: ubuntu_major == "24" and enable_gpu | bool
 
         - name: Configure NVIDIA Fabric Manager
           systemd:
@@ -204,26 +175,27 @@
             enabled: yes
             masked: no
 
-        - name: Set NVIDIA device permissions
-          file:
-            path: "{{ item }}"
-            mode: '0666'
-          with_fileglob:
-            - /dev/nvidia*
-            - /dev/nvidiactl
-            - /dev/nvidia-uvm
-            - /dev/nvidia-uvm-tools
+    - name: Set NVIDIA device permissions
+      file:
+        path: "{{ item }}"
+        mode: '0666'
+      with_fileglob:
+        - /dev/nvidia*
+        - /dev/nvidiactl
+        - /dev/nvidia-uvm
+        - /dev/nvidia-uvm-tools
 
-        - name: Create NVIDIA character device symlinks
-          shell: |
-            ls /dev/nvidia? | egrep 'nvidia[0-9]' | while read i
-            do
-              N=$(echo $i | sed 's/\/dev\/nvidia//');
-              MAJ=$(ls -l $i | awk '{print $5}' | cut -d, -f1)
-              MIN=$(ls -l $i | awk '{print $6}')
-              mkdir -p /dev/char/$MAJ:$MIN
-              ln -sf $i /dev/char/$MAJ:$MIN
-            done
+    - name: Create NVIDIA character device symlinks
+      when: gpu_enabled | bool
+      shell: |
+        ls /dev/nvidia? | egrep 'nvidia[0-9]' | while read i
+        do
+          N=$(echo $i | sed 's/\/dev\/nvidia//');
+          MAJ=$(ls -l $i | awk '{print $5}' | cut -d, -f1)
+          MIN=$(ls -l $i | awk '{print $6}')
+          mkdir -p /dev/char/$MAJ:$MIN
+          ln -sf $i /dev/char/$MAJ:$MIN
+        done
 
     - name: Configure file limits
       blockinfile:
@@ -327,6 +299,7 @@
         mode: '0755'
         content: |
           #!/bin/bash
+          hostnamectl set-hostname "{{ inventory_hostname }}"
           hostname "{{ inventory_hostname }}"
           echo -n "{{ inventory_hostname }}" > /etc/hostname
 
@@ -346,15 +319,31 @@
           [Install]
           WantedBy=multi-user.target
 
-    - name: Enable and start service
+    - name: Enable and start hostname service
       systemd:
         name: set-hostname
         enabled: yes
         state: started
         daemon_reload: yes
 
-    - name: Set hostname one more time with hostnamectl
-      shell: hostnamectl set-hostname {{ inventory_hostname }}
+    - name: Configure and ensure time synchronization
+      block:
+        - name: Ensure timesyncd is installed and enabled
+          systemd:
+            name: systemd-timesyncd
+            state: started
+            enabled: yes
+
+        - name: Configure NTP servers
+          lineinfile:
+            path: /etc/systemd/timesyncd.conf
+            regexp: '^#?NTP='
+            line: 'NTP=pool.ntp.org'
+
+        - name: Force time synchronization
+          shell: |
+            timedatectl set-ntp true
+            systemctl restart systemd-timesyncd
 
     - name: Install MicroK8s
       community.general.snap:

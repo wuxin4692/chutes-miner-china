@@ -23,6 +23,12 @@ all:
     # Ubuntu major/minor version.
     ubuntu_major: "22"
     ubuntu_minor: "04"
+    # CUDA version - leave as-is unless using h200s, in which case either use 12-5 or skip_cuda: true (if provider already pre-installed drivers)
+    cuda_version: "12-6"
+    # NVIDA GPU drivers - leave as-is unless using h200s, in which case it would be 555
+    nvidia_version: "560"
+    # Flag to skip the cuda install entirely, if the provider already has cuda 12.x+ installed (note some chutes will not work unless 12.6+)
+    skip_cuda: false
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.

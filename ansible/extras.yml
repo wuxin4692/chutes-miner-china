@@ -20,13 +20,11 @@
           --namespace gpu-operator \
           --create-namespace \
           --set nodeSelector.kubernetes.io/gpu="true" \
-          --set driver.enabled=true \
+          --set driver.enabled=false \
           --set toolkit.enabled=true \
           --set devicePlugin.enabled=true \
           --set operator.runtimeClass="nvidia-container-runtime" \
-          --set operator.defaultRuntime=containerd \
-          --insecure-skip-tls-verify \
-          --kube-insecure-skip-tls-verify
+          --set operator.defaultRuntime=containerd
       when: is_primary | bool
 
 - name: Install Prometheus
@@ -48,6 +46,5 @@
           --set server.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
           --set alertmanager.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
           --set pushgateway.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
-          --set kubeStateMetrics.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
-          --insecure-skip-tls-verify --kube-insecure-skip-tls-verify
+          --set kubeStateMetrics.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }}
       when: is_primary | bool
