@@ -311,14 +311,14 @@ Execute this from the `charts` directory:
 helm template . --set createPasswords=true -s templates/one-time-passwords.yaml | kubectl apply -n chutes -f -
 ```
 
-Personally, I love helm charts but don't actually like installing the charts as such.  A sane person would use the `helm install` command: https://helm.sh/docs/helm/helm_install/
-
-Or, if you're like me, you can run something like this, from within the `charts` directory:
+Once the secrets are created, you can run this any time to generate your deployment charts, from within the `charts` directory:
 ```bash
 helm template . -f values.yaml > miner-charts.yaml
 ```
 
-Then, you can examine the chart values to see exactly how your modifications to the values file manifest.  If you are satisfied with the result, you can then deploy:
+Any time you change `values.yaml`, you will want to re-run the template command to get the updated charts!
+
+Then, you will deploy the chutes components with:
 ```bash
 kubectl apply -f miner-charts.yaml -n chutes
 ```
