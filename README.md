@@ -176,22 +176,17 @@ Head over to the [ansible](ansible/README.md) documentation for steps on setting
 
 ### 2. Configure prerequisites
 
-Once you've provisioned your nodes with ansible and have kubernetes running, you can get the kubernetes configuration from the primary server (whichever server you labeled as primary in `ansible/inventory.yml`) from `/home/{username}/.kube/config`
-
-Alternatively you can login to the primary server and run:
-```bash
-microk8s config
-```
-
 The easiest way to interact with kubernetes would be from within the primary node, but you can alternatively set it up on your local machine or other server.  To do so:
 - install [kubectl](https://kubernetes.io/docs/reference/kubectl/)
-- copy the the kubernetes configuration from previous step to that machine at path `~/.kube/config`
+- copy the the kubernetes configuration from the CPU primary via `microk8s config` and put it on your workstation at `~/.kube/config`
 - replace the IP address of the cluster with the public IP address of the primary node
 - since the IP will not match the cert, you will need to specify `--insecure-skip-tls-verify` when running any kubectl commands from this server (not necessary when done on primary node)
 
-If you plan to use the primary node, you should alias `kubectl` to be `microk8s kubectl`, e.g. `echo 'alias kubectl="microk8s kubectl"' >> .bashrc`
-
-And while you're at it, alias `helm` as well, e.g. `echo 'alias helm="microk8s helm"' >> .bashrc`
+If you plan to use the primary node, you should alias `kubectl` and `helm`:
+```bash
+echo 'alias kubectl="microk8s kubectl"' >> .bashrc
+echo 'alias helm="microk8s helm"' >> .bashrc
+```
 
 You'll need to setup a few things manually:
 - Create a docker hub login to avoid getting rate-limited on pulling public images (you may not need this at all, but it can't hurt):
@@ -208,7 +203,32 @@ kubectl create secret generic miner-credentials \
   -n chutes
 ```
 
-Install helm on the same local/management machine: https://helm.sh/docs/intro/install/
+#### Full secret creation example
+
+Here's an example using a throwaway key.  Suppose you created a hotkey as such:
+```bash
+$ btcli wallet new_hotkey --wallet.name offline --wallet.hotkey test --wallet.path ~/.bittensor/wallets
+...
+```
+Print out the content of that hotkey, and optionally pipe to jq to pretty-print:
+```bash
+$ cat ~/.bittensor/wallets/offline/hotkeys/test | jq .
+{
+  "accountId": "0x5a30cd5517328838f69ed48531894d94e9f231dff241e1561260a8522a167731",
+  "publicKey": "0x5a30cd5517328838f69ed48531894d94e9f231dff241e1561260a8522a167731",
+  "privateKey": "0x69de0e5d7e66902d5b9da02091bb130aedf49d6c53a2fe67eeb914520e0ea70aa2176663f7b30c93d8826c702e9b22c35ab1a99afbdc02c35618c97e00edab3a",
+  "secretPhrase": "inform sell fitness extra kitten unit hood glass window law spider desk",
+  "secretSeed": "0xe031170f32b4cda05df2f3cf6bc8d76827b683bbce23d9fa960c0b3fc21641b8",
+  "ss58Address": "5E6xfU3oNU7y1a7pQwoc31fmUjwBZ2gKcNCw8EXsdtCQieUQ"
+}
+```
+To create the secret from this key, the command would be:
+```bash
+kubectl create secret generic miner-credentials \
+  --from-literal=ss58=5E6xfU3oNU7y1a7pQwoc31fmUjwBZ2gKcNCw8EXsdtCQieUQ \
+  --from-literal=seed=e031170f32b4cda05df2f3cf6bc8d76827b683bbce23d9fa960c0b3fc21641b8 \
+  -n chutes
+```
 
 ### 3. Configure your environment
 
