@@ -733,11 +733,14 @@ class Gepetto:
         """
         Find the optimal server for scaling up a chute deployment.
         """
+        supported_gpus = list(chute.supported_gpus)
+        if "h200" in supported_gpus and set(supported_gpus) - set(["h200"]):
+            supported_gpus = list(set(supported_gpus) - set(["h200"]))
         total_gpus_per_server = (
             select(Server.server_id, func.count(GPU.gpu_id).label("total_gpus"))
             .select_from(Server)
             .join(GPU, Server.server_id == GPU.server_id)
-            .where(GPU.model_short_ref.in_(chute.supported_gpus), GPU.verified.is_(True))
+            .where(GPU.model_short_ref.in_(supported_gpus), GPU.verified.is_(True))
             .group_by(Server.server_id)
             .subquery()
         )
@@ -764,7 +767,7 @@ class Gepetto:
             .outerjoin(used_gpus_per_server, Server.server_id == used_gpus_per_server.c.server_id)
             .join(GPU, Server.server_id == GPU.server_id)
             .where(
-                GPU.model_short_ref.in_(chute.supported_gpus),
+                GPU.model_short_ref.in_(supported_gpus),
                 GPU.verified.is_(True),
                 (
                     total_gpus_per_server.c.total_gpus
@@ -784,7 +787,9 @@ class Gepetto:
         """
         Force deploy a chute by preempting other deployments (assuming a server exists that can be used).
         """
-
+        supported_gpus = list(chute.supported_gpus)
+        if "h200" in supported_gpus and set(supported_gpus) - set(["h200"]):
+            supported_gpus = list(set(supported_gpus) - set(["h200"]))
         # Get the prometheus data for staleness check
         prom = PrometheusConnect(url=settings.prometheus_url)
         last_invocations = {}
@@ -812,7 +817,7 @@ class Gepetto:
             select(Server.server_id, func.count(GPU.gpu_id).label("total_gpus"))
             .select_from(Server)
             .join(GPU, Server.server_id == GPU.server_id)
-            .where(GPU.model_short_ref.in_(chute.supported_gpus), GPU.verified.is_(True))
+            .where(GPU.model_short_ref.in_(supported_gpus), GPU.verified.is_(True))
             .group_by(Server.server_id)
             .subquery()
         )
@@ -839,7 +844,7 @@ class Gepetto:
             .outerjoin(used_gpus_per_server, Server.server_id == used_gpus_per_server.c.server_id)
             .join(GPU, Server.server_id == GPU.server_id)
             .where(
-                GPU.model_short_ref.in_(chute.supported_gpus),
+                GPU.model_short_ref.in_(supported_gpus),
                 GPU.verified.is_(True),
                 total_gpus_per_server.c.total_gpus >= chute.gpu_count,
             )

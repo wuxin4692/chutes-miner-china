@@ -24,7 +24,7 @@ async def list_servers(
     """
     List servers, this can be quite a large response...
     """
-    return (await db.execute(select(Server))).scalars().all()
+    return (await db.execute(select(Server))).unique().scalars().all()
 
 
 @router.post("/")
