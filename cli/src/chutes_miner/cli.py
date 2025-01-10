@@ -158,18 +158,18 @@ def local_inventory(
 def remote_inventory(
     raw_json: bool = typer.Option(False, help="Display raw JSON output"),
     hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
-    miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL"),
+    validator_api: str = typer.Option("https://api.chutes.ai", help="Validator API base URL"),
 ):
     """
     Show remote (i.e., what the validator has tracked) inventory.
     """
 
     async def _remote_inventory():
-        nonlocal hotkey, miner_api, raw_json
+        nonlocal hotkey, validator_api, raw_json
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, _ = sign_request(hotkey, purpose="miner", remote=True)
             inventory = []
-            async with session.get("https://api.chutes.ai/miner/nodes/", headers=headers) as resp:
+            async with session.get(f"{validator_api}/miner/nodes/", headers=headers) as resp:
                 async for content_enc in resp.content:
                     content = content_enc.decode()
                     if content.startswith("data: "):
