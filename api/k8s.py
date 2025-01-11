@@ -506,10 +506,10 @@ async def deploy_chute(chute: Chute, server: Server):
                                     ]
                                 ),
                                 initial_delay_seconds=15,
-                                period_seconds=10,
+                                period_seconds=15,
                                 timeout_seconds=1,
                                 success_threshold=1,
-                                failure_threshold=5,
+                                failure_threshold=60,
                             ),
                         )
                     ],
