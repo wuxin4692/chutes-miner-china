@@ -184,9 +184,10 @@ async def deploy_graval(
         )
 
     # Create the deployment.
+    nice_name = node_name.replace(".", "-")
     deployment = V1Deployment(
         metadata=V1ObjectMeta(
-            name=f"graval-{node_name}",
+            name=f"graval-{nice_name}",
             labels={
                 "app": "graval",
                 "chute/chute": "false",
@@ -247,7 +248,7 @@ async def deploy_graval(
     # And the service that exposes it.
     service = V1Service(
         metadata=V1ObjectMeta(
-            name=f"graval-service-{node_name}",
+            name=f"graval-service-{nice_name}",
             labels={"app": "graval", "graval-node": node_name},
         ),
         spec=V1ServiceSpec(
@@ -285,14 +286,14 @@ async def deploy_graval(
     except ApiException as exc:
         try:
             k8s_core_client().delete_namespaced_service(
-                name=f"graval-service-{node_name}",
+                name=f"graval-service-{nice_name}",
                 namespace=settings.namespace,
             )
         except Exception:
             ...
         try:
             k8s_core_client().delete_namespaced_deployment(
-                name=f"graval-{node_name}",
+                name=f"graval-{nice_name}",
                 namespace=settings.namespace,
             )
         except Exception:
