@@ -1157,9 +1157,8 @@ class Gepetto:
                         logger.warning(
                             f"Found GPU in inventory of {validator_hotkey} that is not local: {gpu_id}"
                         )
-                        # XXX also want to reconsile these, but vali downtime = really bad here...
-                        # if (validator := validator_by_hotkey(validator_hotkey)) is not None:
-                        #     await self.remove_gpu_from_validator(validator, gpu_id)
+                        if (validator := validator_by_hotkey(validator_hotkey)) is not None:
+                            await self.remove_gpu_from_validator(validator, gpu_id)
 
             # Chutes that were removed/outdated.
             async for row in await session.stream(select(Chute)):
