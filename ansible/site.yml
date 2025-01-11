@@ -1,3 +1,22 @@
+- name: Pre-flight checks
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Gather Wireguard IPs
+      set_fact:
+        wireguard_ips: "{{ wireguard_ips | default([]) + [hostvars[item].wireguard_ip] }}"
+      loop: "{{ groups['all'] }}"
+      when: hostvars[item].wireguard_ip is defined
+
+    - name: Check if there are duplicates in IP list
+      set_fact:
+        wireguard_ip_duplicates: "{{ wireguard_ips | unique | length != wireguard_ips | length }}"
+
+    - name: Fail if there are duplicates
+      fail:
+        msg: "Duplicate Wireguard IP address found"
+      when: wireguard_ip_duplicates
+
 - name: Setup Kubernetes Node
   hosts: all
   become: yes
@@ -12,6 +31,10 @@
     - name: Update apt cache
       apt:
         update_cache: yes
+
+    - name: Gather package facts
+      package_facts:
+        manager: auto
 
     - name: Stop and disable unattended upgrades
       systemd:
@@ -60,6 +83,51 @@
       apt:
         name: containerd.io
         state: absent
+
+    - name: Remove unwanted files in sources.list.d
+      find:
+        paths: /etc/apt/sources.list.d
+        patterns:
+          - "*"
+        excludes:
+          - "cuda-*.list"
+          - "deadsnakes.list"
+          - "docker.list"
+          - "nvidia-docker-container.list"
+        file_type: file
+      register: apt_files_to_remove
+
+    - name: Delete found files
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items: "{{ apt_files_to_remove.files }}"
+
+    - name: Remove proxy configuration files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_fileglob:
+        - "/etc/apt/apt.conf.d/*proxy*"
+
+    - name: Remove proxy settings from apt.conf
+      lineinfile:
+        path: /etc/apt/apt.conf
+        regexp: "{{ item }}"
+        state: absent
+      with_items:
+        - 'Acquire::http::Proxy'
+        - 'Acquire::https::Proxy'
+      when: ansible_path_apt_conf.stat.exists is defined and ansible_path_apt_conf.stat.exists
+
+    - name: Unset all snap proxy settings
+      command: snap unset system {{ item }}
+      loop:
+        - proxy.http
+        - proxy.https
+        - proxy.no-proxy
+      changed_when: true
+      ignore_errors: true
 
     - name: Install basic system prerequisites
       apt:
@@ -345,6 +413,22 @@
             timedatectl set-ntp true
             systemctl restart systemd-timesyncd
 
+    - name: Disable IPv6
+      block:
+        - name: Set sysctl parameters for IPv6
+          sysctl:
+            name: "{{ item.key }}"
+            value: "{{ item.value }}"
+            state: present
+            sysctl_file: /etc/sysctl.d/99-disable-ipv6.conf
+            reload: yes
+          with_items:
+            - { key: "net.ipv6.conf.all.disable_ipv6", value: "1" }
+            - { key: "net.ipv6.conf.default.disable_ipv6", value: "1" }
+            - { key: "net.ipv6.conf.lo.disable_ipv6", value: "1" }
+          register: ipv6_disabled
+      become: yes
+
     - name: Install MicroK8s
       community.general.snap:
         name: microk8s
@@ -457,7 +541,7 @@
         pre_reboot_delay: 0
         post_reboot_delay: 30
         test_command: uptime
-      when: gpu_setup.changed
+      when: gpu_setup.changed or ipv6_disabled.changed
       register: rebooted
 
     - name: Wait for system to be ready
