@@ -1135,7 +1135,7 @@ class Gepetto:
                 all_gpus += list(nodes)
             local_gpu_ids = set()
             async for row in (
-                await session.stream(select(GPU).where(GPU.verified.is_(True)))
+                await session.stream(select(GPU))
             ).unique():
                 gpu = row[0]
                 local_gpu_ids.add(gpu.gpu_id)
