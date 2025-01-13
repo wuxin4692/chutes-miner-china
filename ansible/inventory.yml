@@ -2,8 +2,8 @@ all:
   vars:
     # This is your SSH public key, e.g. cat ~/.ssh/id_rsa.pub
     ssh_keys:
-      - "ssh-rsa AAAA... user@hostnane"
-      - "ssh-rsa BBBB... user@hostnane"
+      - "ssh-rsa AAAA... user@hostname"
+      - "ssh-rsa BBBB... user@hostname"
     # The username you want to use to login to those machines (and your public key will be added to).
     user: billybob
     # The initial username to login with, for fresh nodes that may not have your username setup.
