@@ -71,6 +71,7 @@
         patterns:
           - "*"
         excludes:
+          - "ubuntu.sources"
           - "cuda-*.list"
           - "deadsnakes.list"
           - "docker.list"
