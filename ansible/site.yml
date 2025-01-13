@@ -1,22 +1,3 @@
-- name: Pre-flight checks
-  hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Gather Wireguard IPs
-      set_fact:
-        wireguard_ips: "{{ wireguard_ips | default([]) + [hostvars[item].wireguard_ip] }}"
-      loop: "{{ groups['all'] }}"
-      when: hostvars[item].wireguard_ip is defined
-
-    - name: Check if there are duplicates in IP list
-      set_fact:
-        wireguard_ip_duplicates: "{{ wireguard_ips | unique | length != wireguard_ips | length }}"
-
-    - name: Fail if there are duplicates
-      fail:
-        msg: "Duplicate Wireguard IP address found"
-      when: wireguard_ip_duplicates
-
 - name: Setup Kubernetes Node
   hosts: all
   become: yes
@@ -280,34 +261,6 @@
         - /etc/pam.d/common-session
         - /etc/pam.d/common-session-noninteractive
 
-    - name: Install Wireguard
-      apt:
-        name: wireguard
-        state: present
-
-    - name: Check if Wireguard private key exists
-      stat:
-        path: /etc/wireguard/private.key
-      register: wg_private_exists
-
-    - name: Generate Wireguard keys
-      shell: |
-        wg genkey > /etc/wireguard/private.key
-        cat /etc/wireguard/private.key | wg pubkey > /etc/wireguard/public.key
-        chmod 600 /etc/wireguard/private.key /etc/wireguard/public.key
-      when: not wg_private_exists.stat.exists
-      register: wg_key_created
-
-    - name: Get public keys
-      slurp:
-        src: /etc/wireguard/public.key
-      register: public_keys
-
-    - name: Get private keys
-      slurp:
-        src: /etc/wireguard/private.key
-      register: private_keys
-
     - name: Set hostname
       hostname:
         name: "{{ inventory_hostname }}"
@@ -461,10 +414,6 @@
             mode: '0600'
             owner: "{{ username }}"
             group: "{{ username }}"
-
-    - name: Restart Wireguard if config changed
-      shell: wg-quick down wg0; wg-quick up wg0
-      when: wireguard_primary.changed or wireguard_worker.changed
 
     - name: Create containerd config directory
       file:
