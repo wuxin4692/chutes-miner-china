@@ -458,17 +458,18 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
     async def _cleanup(delete_node: bool = True):
         node_name = node_object.metadata.name
         node_uid = node_object.metadata.uid
+        nice_name = node_name.replace(".", "-")
         try:
             k8s_core_client().delete_namespaced_service(
-                name=f"graval-service-{node_name}", namespace=settings.namespace
+                name=f"graval-service-{nice_name}", namespace=settings.namespace
             )
         except Exception:
             ...
         try:
             k8s_app_client().delete_namespaced_deployment(
-                name=f"graval-{node_name}", namespace=settings.namespace
+                name=f"graval-{nice_name}", namespace=settings.namespace
             )
-            label_selector = f"graval-node={node_name}"
+            label_selector = f"graval-node={nice_name}"
 
             from api.k8s import wait_for_deletion
 
