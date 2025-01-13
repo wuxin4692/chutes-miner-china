@@ -308,39 +308,6 @@
         src: /etc/wireguard/private.key
       register: private_keys
 
-    - name: Set facts for keys
-      set_fact:
-        wg_public_key: "{{ public_keys['content'] | b64decode | trim }}"
-        wg_private_key: "{{ private_keys['content'] | b64decode | trim }}"
-
-    - name: Debug hostvars for wg keys
-      debug:
-        msg: "Host {{ item }}: has wg_public_key = {{ hostvars[item]['wg_public_key'] is defined }}"
-      loop: "{{ groups['all'] }}"
-      when: is_primary | bool
-
-    - name: Create Wireguard config for primary
-      when: is_primary | bool
-      template:
-        src: wg0-primary.conf.j2
-        dest: /etc/wireguard/wg0.conf
-        mode: '0600'
-      register: wireguard_primary
-
-    - name: Create Wireguard config for worker
-      when: not is_primary | bool
-      template:
-        src: wg0-worker.conf.j2
-        dest: /etc/wireguard/wg0.conf
-        mode: '0600'
-      register: wireguard_worker
-
-    - name: Enable and start Wireguard
-      systemd:
-        name: wg-quick@wg0
-        enabled: yes
-        state: started
-
     - name: Set hostname
       hostname:
         name: "{{ inventory_hostname }}"
