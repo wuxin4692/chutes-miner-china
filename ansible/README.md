@@ -103,12 +103,14 @@ ansible-playbook -i inventory.yml extras.yml
 
 ## To add a new node, after the fact
 
-Be very careful, and make sure you note any and all changes before re-running the playbook for all hosts.  It should work well to add a new host, but be warned.
+First, update your inventory.yml with the new host configuration.
+
+Then, run the site playbook with `--limit {hostname}`, e.g.:
 ```bash
-ansible-playbook -i inventory.yml site.yml
+ansible-playbook -i inventory.yml site.yml --limit chutes-h200-0
 ```
 
-And join the node to the cluster:
+Then, join the new node to the cluster (DO NOT USE `--limit` HERE!):
 ```bash
 ansible-playbook -i inventory.yml join-cluster.yml
 ```
