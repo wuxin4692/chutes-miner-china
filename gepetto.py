@@ -1134,9 +1134,7 @@ class Gepetto:
             for nodes in self.remote_nodes.values():
                 all_gpus += list(nodes)
             local_gpu_ids = set()
-            async for row in (
-                await session.stream(select(GPU))
-            ).unique():
+            async for row in (await session.stream(select(GPU))).unique():
                 gpu = row[0]
                 local_gpu_ids.add(gpu.gpu_id)
                 if gpu.gpu_id not in all_gpus:
@@ -1150,15 +1148,16 @@ class Gepetto:
                     #     )
                     # )
 
-            # GPUs in validator inventory that don't exist locally.
-            for validator_hotkey, nodes in self.remote_nodes.items():
-                for gpu_id in nodes:
-                    if gpu_id not in local_gpu_ids:
-                        logger.warning(
-                            f"Found GPU in inventory of {validator_hotkey} that is not local: {gpu_id}"
-                        )
-                        if (validator := validator_by_hotkey(validator_hotkey)) is not None:
-                            await self.remove_gpu_from_validator(validator, gpu_id)
+            # XXX this also seems problematic currently :thinking:
+            ## GPUs in validator inventory that don't exist locally.
+            # for validator_hotkey, nodes in self.remote_nodes.items():
+            #    for gpu_id in nodes:
+            #        if gpu_id not in local_gpu_ids:
+            #            logger.warning(
+            #                f"Found GPU in inventory of {validator_hotkey} that is not local: {gpu_id}"
+            #            )
+            #            if (validator := validator_by_hotkey(validator_hotkey)) is not None:
+            #                await self.remove_gpu_from_validator(validator, gpu_id)
 
             # Chutes that were removed/outdated.
             async for row in await session.stream(select(Chute)):
