@@ -15,7 +15,7 @@ app.kubernetes.io/name: chutes-registry
 {{- end }}
 
 {{- define "chutes.labels" -}}
-chute-deployment: "true"
+chutes/chute: "true"
 {{- end }}
 
 {{- define "bootstrap.labels" -}}

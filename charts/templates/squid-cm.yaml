@@ -64,6 +64,11 @@ data:
     .cdnjs.cloudflare.com
     .googleusercontent.com
     .storage.googleapis.com
+    .b-cdn.net
+    .bunnycdn.com (corporate domain)
+    .bunnystatic.com
+    .bunnyway.net
+    .bunny.net
 
     # Cloud Storage
     .s3.amazonaws.com
