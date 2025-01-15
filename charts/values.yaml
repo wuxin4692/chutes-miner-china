@@ -3,6 +3,10 @@ createPasswords: false  # XXX only ever set to true one time (first time)!!!
 cache:
   max_age_days: 30
   max_size_gb: 500
+  overrides:
+# Add any per-node cache size (in GB) overrides here, e.g.:
+#    chutes-miner-gpu-0: 1000
+#    chutes-miner-gpu-1: 1500
 
 validators:
   defaultRegistry: registry.chutes.ai

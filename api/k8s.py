@@ -387,7 +387,11 @@ async def deploy_chute(chute: Chute, server: Server):
                                 ),
                                 V1EnvVar(
                                     name="CACHE_MAX_SIZE_GB",
-                                    value=str(settings.cache_max_size_gb),
+                                    value=str(
+                                        settings.cache_overrides.get(
+                                            server.name, settings.cache_max_size_gb
+                                        )
+                                    ),
                                 ),
                             ],
                             volume_mounts=[
