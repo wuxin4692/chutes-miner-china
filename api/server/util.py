@@ -411,7 +411,8 @@ async def _advertise_nodes(validator: Validator, gpus: List[GPU]):
         async with session.post(
             f"{validator.api}/nodes/", data=payload_string, headers=headers
         ) as response:
-            assert response.status == 202
+            response_text = await response.text()
+            assert response.status == 202, response_text
             data = await response.json()
             nodes = data.get("nodes")
             task_id = data.get("task_id")
