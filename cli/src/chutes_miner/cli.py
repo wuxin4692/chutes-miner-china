@@ -30,10 +30,10 @@ def format_gpu_verification(error, verified_at):
     """
     Helper to format table cell for GPU verification.
     """
-    if error:
-        return f"[red]Error: {error}[/red]"
-    elif verified_at:
+    if verified_at:
         return f"[green]Verified: {format_date(verified_at)}[/green]"
+    elif error:
+        return f"[red]Error: {error}[/red]"
     return "[yellow]Pending[/yellow]"
 
 
@@ -108,19 +108,17 @@ def display_remote_inventory(inventory):
     console = Console()
     table = Table(title="GPU Information")
     table.add_column("Name", style="cyan")
+    table.add_column("Chute", style="cyan")
     table.add_column("Memory (GB)", justify="right", style="green")
-    table.add_column("Compute Cap.", justify="center", style="magenta")
-    table.add_column("Processors", justify="right", style="yellow")
     table.add_column("Clock (MHz)", justify="right", style="red")
     table.add_column("Created At", style="blue")
     table.add_column("Verification Status", style="white")
     for gpu in inventory:
         table.add_row(
             gpu["name"],
+            f"{gpu['chute_id']} {gpu['chute']}",
             format_memory(gpu["memory"]),
-            f"{gpu['major']}.{gpu['minor']}",
-            str(gpu["processors"]),
-            f"{gpu['clock_rate']/1000:.0f}",
+            f"{gpu['clock_rate'] / 1000:.0f}",
             format_date(gpu["created_at"]),
             format_gpu_verification(gpu["verification_error"], gpu["verified_at"]),
         )
@@ -169,11 +167,28 @@ def remote_inventory(
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, _ = sign_request(hotkey, purpose="miner", remote=True)
             inventory = []
+            gpu_map = {}
             async with session.get(f"{validator_api}/miner/nodes/", headers=headers) as resp:
                 async for content_enc in resp.content:
                     content = content_enc.decode()
                     if content.startswith("data: "):
                         inventory.append(json.loads(content[6:]))
+                        gpu_map[inventory[-1]["uuid"]] = inventory[-1]
+                        gpu_map[inventory[-1]["uuid"]].update(
+                            {
+                                "chute": None,
+                                "chute_id": None,
+                            }
+                        )
+            async with session.get(f"{validator_api}/miner/inventory", headers=headers) as resp:
+                for item in await resp.json():
+                    if item["gpu_id"] in gpu_map:
+                        gpu_map[item["gpu_id"]].update(
+                            {
+                                "chute": item["chute_name"],
+                                "chute_id": item["chute_id"],
+                            }
+                        )
             inventory = sorted(inventory, key=lambda o: o["created_at"])
             if raw_json:
                 print(json.dumps(inventory, indent=2))
