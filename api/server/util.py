@@ -178,7 +178,7 @@ async def deploy_graval(
 
     # Make sure the GPU labels are set.
     gpu_count = node_labels.get("nvidia.com/gpu.count", "0")
-    if not gpu_count or not gpu_count.isdigit() or not 0 < (gpu_count := int(gpu_count)) <= 8:
+    if not gpu_count or not gpu_count.isdigit() or not 0 < (gpu_count := int(gpu_count)) <= 10:
         raise GPUlessServer(
             f"Kubernetes node {node_name} nvidia.com/gpu.count label missing or invalid: {node_labels.get('nvidia.com/gpu.count')}"
         )
