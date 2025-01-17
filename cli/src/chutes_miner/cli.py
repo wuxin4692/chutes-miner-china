@@ -26,7 +26,7 @@ def format_date(date_str):
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
-def format_gpu_verification(error, verified_at):
+def format_verification(error, verified_at):
     """
     Helper to format table cell for GPU verification.
     """
@@ -112,7 +112,8 @@ def display_remote_inventory(inventory):
     table.add_column("Memory (GB)", justify="right", style="green")
     table.add_column("Clock (MHz)", justify="right", style="red")
     table.add_column("Created At", style="blue")
-    table.add_column("Verification Status", style="white")
+    table.add_column("GPU Verification", style="white")
+    table.add_column("Instance verification", style="white")
     for gpu in inventory:
         table.add_row(
             gpu["name"],
@@ -120,7 +121,8 @@ def display_remote_inventory(inventory):
             format_memory(gpu["memory"]),
             f"{gpu['clock_rate'] / 1000:.0f}",
             format_date(gpu["created_at"]),
-            format_gpu_verification(gpu["verification_error"], gpu["verified_at"]),
+            format_verification(gpu["verification_error"], gpu["verified_at"]),
+            format_verification(gpu["inst_verification_error"], gpu["inst_verified_at"]),
         )
     console.print(table)
     console.print("\n" + "=" * 80 + "\n")
@@ -178,6 +180,8 @@ def remote_inventory(
                             {
                                 "chute": None,
                                 "chute_id": None,
+                                "inst_verification_error": None,
+                                "inst_verified_at": None,
                             }
                         )
             async with session.get(f"{validator_api}/miner/inventory", headers=headers) as resp:
@@ -187,6 +191,8 @@ def remote_inventory(
                             {
                                 "chute": item["chute_name"],
                                 "chute_id": item["chute_id"],
+                                "inst_verification_error": item["verification_error"],
+                                "inst_verified_at": item["last_verified_at"],
                             }
                         )
             inventory = sorted(inventory, key=lambda o: o["created_at"])
