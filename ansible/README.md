@@ -128,6 +128,11 @@ ansible-playbook -i inventory.yml extras.yml
 
 First, update your inventory.yml with the new host configuration.
 
+Then, add the node to your wireguard network:
+```bash
+ansible-playbook -i inventory.yml wireguard.yml
+```
+
 Then, run the site playbook with `--limit {hostname}`, e.g.:
 ```bash
 ansible-playbook -i inventory.yml site.yml --limit chutes-h200-0
