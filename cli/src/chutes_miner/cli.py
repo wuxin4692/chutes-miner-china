@@ -286,6 +286,35 @@ def purge_deployments(
     asyncio.run(_purge_deployments())
 
 
+def scorch_remote(
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    validator_api: str = typer.Option("https://api.chutes.ai", help="Validator API base URL"),
+):
+    """
+    Purge all inventory from the validator API.
+    """
+
+    async def _scorch_remote():
+        nonlocal hotkey, validator_api
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, payload_string = sign_request(hotkey, purpose="miner", remote=True)
+            async with session.get(
+                f"{validator_api.rstrip('/')}/miner/nodes/",
+                headers=headers,
+            ) as resp:
+                async for line in resp.content:
+                    if not line or not line.startswith(b"data:"):
+                        continue
+                    gpu = json.loads(line.decode()[6:])
+                    print(f"Deleting {gpu['name']} with uuid {gpu['uuid']}")
+                    async with session.delete(
+                        f"{validator_api.rstrip('/')}/nodes/{gpu['uuid']}"
+                    ) as resp:
+                        print(f"  successfully deleted {gpu['name']} with uuid {gpu['uuid']}")
+
+    asyncio.run(_scorch_remote())
+
+
 app.command(name="add-node", help="Add a new kubernetes node to your cluster")(add_node)
 app.command(name="delete-node", help="Delete a kubernetes node from your cluster")(delete_node)
 app.command(
@@ -293,6 +322,9 @@ app.command(
 )(purge_deployments)
 app.command(name="local-inventory", help="Show local inventory")(local_inventory)
 app.command(name="remote-inventory", help="Show remote inventory")(remote_inventory)
+app.command(name="scorch-remote", help="Purge all GPUs/instances/etc. from validator")(
+    scorch_remote
+)
 
 
 if __name__ == "__main__":
