@@ -259,13 +259,23 @@ validators:
 
 To enable faster cold-starts, the kubernetes deployments use a hostPath mount for caching huggingface models.  The default is set to purge anything over 7 days old, when > 500gb has been consumed:
 ```yaml
-hfCache:
-  maxAgeDays: 7
-  maxSizeGB: 500
+cache:
+  max_age_days: 30
+  max_size_gb: 850
+  overrides:
 ```
 
-If you have lots and lots of storage space, you may want to increase this or otherwise change defaults.
+You can override per-node settings with the overrides block there, e.g.:
+```yaml
+cache:
+  max_age_days: 30
+  max_size_gb: 850
+  overrides:
+    node-0: 5000
+```
+In this example, the default will be 850GB, and node-0 will have 5TB.
 
+If you have lots and lots of storage space, you may want to increase this or otherwise change defaults.
 
 #### c. minerApi
 
