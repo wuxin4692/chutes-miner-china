@@ -143,7 +143,7 @@ This is the main thing to optimize as a miner!
 
 The first thing you'll want to do is provision your servers/kubernetes.
 
-ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc.
+ALL servers must be bare metal/VM, meaning it will not work on Runpod, Vast, etc., and we do not currently support shared or dynamic IPs - the IPs must be unique, static, and provide a 1:1 port mapping.
 
 ### Important RAM note!
 
