@@ -27,7 +27,7 @@
           --namespace gpu-operator \
           --create-namespace \
           --set nodeSelector.kubernetes.io/gpu="true" \
-          --set driver.enabled=false \
+          --set driver.enabled=true \
           --set toolkit.enabled=true \
           --set devicePlugin.enabled=true \
           --set operator.runtimeClass="nvidia-container-runtime" \
@@ -64,6 +64,11 @@
         microk8s helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
           --create-namespace \
           --namespace kubernetes-dashboard \
-          --set nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set app.scheduling.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set auth.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set api.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set web.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set metricsScraper.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set kong.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
           --set persistence.enabled=false
       when: is_primary | bool

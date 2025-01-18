@@ -1,4 +1,4 @@
-- name: Make sure each node can ping the primary
+- name: Join all nodes to the kubernetes cluster
   hosts: all
   tasks:
     - name: Get primary node wireguard IP
@@ -24,9 +24,6 @@
         - not (is_primary | bool)
         - ping_result.failed
 
-- name: Get join command from primary node
-  hosts: all
-  tasks:
     - name: Make sure node advertises the WG IP
       shell: microk8s kubectl annotate node {{ inventory_hostname }} "kubeadm.alpha.kubernetes.io/internal-ip={{ wireguard_ip }}" --overwrite
       when: is_primary | bool
@@ -55,18 +52,12 @@
       delegate_facts: true
       when: is_primary | bool
 
-- name: Join worker nodes to cluster
-  hosts: all
-  tasks:
     - name: Join cluster as worker node
       shell: "{{ hostvars['localhost']['join_command'] | replace('\n', '') }} --worker --skip-verify"
       when:
         - not is_primary | bool
         - cluster_check.rc != 0
 
-- name: Label nodes with external IP
-  hosts: all
-  tasks:
     - name: Wait for node to be ready
       shell: "microk8s kubectl get nodes {{ item }} --no-headers | grep -w Ready"
       register: node_ready
