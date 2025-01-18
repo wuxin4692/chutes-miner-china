@@ -324,7 +324,7 @@ class Gepetto:
                         continue
 
                     # Calculate value ratio
-                    chute_value = potential_gain / potential_server.hourly_cost
+                    chute_value = potential_gain / (potential_server.hourly_cost * chute.gpu_count)
                     logger.info(
                         f"Estimated {potential_gain=} for name={chute_info['name']} "
                         f"chute_id={chute_info['chute_id']} on {validator=}, "
