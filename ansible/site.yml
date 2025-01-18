@@ -388,7 +388,7 @@
           when: not has_node_ip
           register: kubelet_modified
 
-        - name: Add advertise-address to to kubeapi args
+        - name: Add advertise-address to kubeapi args
           lineinfile:
             path: /var/snap/microk8s/current/args/kube-apiserver
             line: "--advertise-address={{ wireguard_ip }}"
