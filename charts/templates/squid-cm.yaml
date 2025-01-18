@@ -57,6 +57,7 @@ data:
     .fastly.net
     .akamai.net
     .cloudflare.com
+    .cloudflarestorage.com
     .jsdelivr.net
     .unpkg.com
     .bunny.net
