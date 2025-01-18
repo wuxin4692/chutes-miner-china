@@ -297,7 +297,7 @@ def scorch_remote(
     async def _scorch_remote():
         nonlocal hotkey, validator_api
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            headers, payload_string = sign_request(hotkey, purpose="miner", remote=True)
+            headers, _ = sign_request(hotkey, purpose="miner", remote=True)
             async with session.get(
                 f"{validator_api.rstrip('/')}/miner/nodes/",
                 headers=headers,
@@ -307,8 +307,10 @@ def scorch_remote(
                         continue
                     gpu = json.loads(line.decode()[6:])
                     print(f"Deleting {gpu['name']} with uuid {gpu['uuid']}")
+                    headers, _ = sign_request(hotkey, purpose="nodes", remote=True)
                     async with session.delete(
-                        f"{validator_api.rstrip('/')}/nodes/{gpu['uuid']}"
+                        f"{validator_api.rstrip('/')}/nodes/{gpu['uuid']}",
+                        headers=headers,
                     ) as resp:
                         print(f"  successfully deleted {gpu['name']} with uuid {gpu['uuid']}")
 
