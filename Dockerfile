@@ -15,11 +15,11 @@ RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/relea
 USER chutes
 ADD --chown=chutes README.md /app/README.md
 ADD --chown=chutes pyproject.toml poetry.lock /app/
-ADD --chown=chutes gepetto.py /app/gepetto.py
 WORKDIR /app
 RUN poetry install --no-root
 ADD --chown=chutes api /app/api
 ADD --chown=chutes audit_exporter.py /app/audit_exporter.py
+ADD --chown=chutes gepetto.py /app/gepetto.py
 ENV PYTHONPATH=/app
 ENTRYPOINT ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 

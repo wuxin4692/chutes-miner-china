@@ -720,6 +720,7 @@ class Gepetto:
             .join(GPU)
             .join(Server)
             .join(gpu_counts, Server.server_id == gpu_counts.c.server_id)
+            .where(Server.locked.is_(False))
             .where(Deployment.chute_id == chute.chute_id)
             .where(Deployment.created_at <= func.now() - timedelta(minutes=5))
             .order_by(text("removal_score DESC"))
@@ -774,6 +775,7 @@ class Gepetto:
                     - func.coalesce(used_gpus_per_server.c.used_gpus, 0)
                     >= chute.gpu_count
                 ),
+                Server.locked.is_(False),
             )
             .order_by(Server.hourly_cost.asc(), text("free_gpus ASC"))
             .limit(1)
@@ -847,6 +849,7 @@ class Gepetto:
                 GPU.model_short_ref.in_(supported_gpus),
                 GPU.verified.is_(True),
                 total_gpus_per_server.c.total_gpus >= chute.gpu_count,
+                Server.locked.is_(False),
             )
             .order_by(Server.hourly_cost.asc(), text("free_gpus ASC"))
         )

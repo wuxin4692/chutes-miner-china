@@ -317,6 +317,50 @@ def scorch_remote(
     asyncio.run(_scorch_remote())
 
 
+async def _lock_or_unlock_server(lock: bool, name: str, hotkey: str, miner_api: str):
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
+        headers, _ = sign_request(hotkey, purpose="management")
+        path = "/lock" if lock else "/unlock"
+        async with session.get(
+            f"{miner_api.rstrip('/')}/servers/{name}{path}",
+            headers=headers,
+        ) as resp:
+            server = await resp.json()
+            print(f"Server {server['name']} lock status is now: {server['locked']}")
+
+
+def lock_server(
+    name: str = typer.Option(..., help="Name of the server/node"),
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL"),
+):
+    """
+    Lock a server's deployments.
+    """
+
+    async def _lock_server():
+        nonlocal name, hotkey, miner_api
+        await _lock_or_unlock_server(lock=True, name=name, hotkey=hotkey, miner_api=miner_api)
+
+    asyncio.run(_lock_server())
+
+
+def unlock_server(
+    name: str = typer.Option(..., help="Name of the server/node"),
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL"),
+):
+    """
+    Unlock a server's deployments.
+    """
+
+    async def _unlock_server():
+        nonlocal name, hotkey, miner_api
+        await _lock_or_unlock_server(lock=False, name=name, hotkey=hotkey, miner_api=miner_api)
+
+    asyncio.run(_unlock_server())
+
+
 app.command(name="add-node", help="Add a new kubernetes node to your cluster")(add_node)
 app.command(name="delete-node", help="Delete a kubernetes node from your cluster")(delete_node)
 app.command(
@@ -327,6 +371,8 @@ app.command(name="remote-inventory", help="Show remote inventory")(remote_invent
 app.command(name="scorch-remote", help="Purge all GPUs/instances/etc. from validator")(
     scorch_remote
 )
+app.command(name="lock", help="Lock a server's deployments")(lock_server)
+app.command(name="unlock", help="Unlock a server's deployments")(unlock_server)
 
 
 if __name__ == "__main__":

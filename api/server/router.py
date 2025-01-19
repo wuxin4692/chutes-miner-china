@@ -16,6 +16,24 @@ from api.server.util import bootstrap_server
 router = APIRouter()
 
 
+async def _get_server(db, id_or_name):
+    server = (
+        (
+            await db.execute(
+                select(Server).where(or_(Server.name == id_or_name, Server.server_id == id_or_name))
+            )
+        )
+        .unique()
+        .scalar_one_or_none()
+    )
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No kubernetes node with id or name {id_or_name} found!",
+        )
+    return server
+
+
 @router.get("/")
 async def list_servers(
     db: AsyncSession = Depends(get_db_session),
@@ -57,6 +75,38 @@ async def create_server(
     return StreamingResponse(_stream_provisioning_status())
 
 
+@router.get("/{id_or_name}/lock")
+async def lock_server(
+    id_or_name: str,
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(authorize(allow_miner=True, allow_validator=False, purpose="management")),
+):
+    """
+    Lock a server's deployments so it won't chase bounties.
+    """
+    server = await _get_server(db, id_or_name)
+    server.locked = True
+    await db.commit()
+    await db.refresh(server)
+    return server
+
+
+@router.get("/{id_or_name}/unlock")
+async def unlock_server(
+    id_or_name: str,
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(authorize(allow_miner=True, allow_validator=False, purpose="management")),
+):
+    """
+    Unlock a server's deployments so it can chase bounties.
+    """
+    server = await _get_server(db, id_or_name)
+    server.locked = False
+    await db.commit()
+    await db.refresh(server)
+    return server
+
+
 @router.delete("/{id_or_name}")
 async def delete_server(
     id_or_name: str,
@@ -66,21 +116,7 @@ async def delete_server(
     """
     Remove a kubernetes node from the cluster.
     """
-    server = (
-        (
-            await db.execute(
-                select(Server).where(or_(Server.name == id_or_name, Server.server_id == id_or_name))
-            )
-        )
-        .unique()
-        .scalar_one_or_none()
-    )
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No kubernetes node with id or name {id_or_name} found!",
-        )
-
+    server = await _get_server(db, id_or_name)
     await settings.redis_client.publish(
         "miner_events",
         json.dumps(
