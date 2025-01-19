@@ -662,6 +662,7 @@ class Gepetto:
                 version=chute_dict["version"],
                 supported_gpus=chute_dict["supported_gpus"],
                 gpu_count=chute_dict["node_selector"]["gpu_count"],
+                ban_reason=None,
             )
             session.add(chute)
             await session.commit()
@@ -734,6 +735,9 @@ class Gepetto:
         """
         Find the optimal server for scaling up a chute deployment.
         """
+        if chute.ban_reason:
+            logger.warning(f"Will not scale up banned chute {chute.chute_id=}: {chute.ban_reason=}")
+            return None
         supported_gpus = list(chute.supported_gpus)
         if "h200" in supported_gpus and set(supported_gpus) - set(["h200"]):
             supported_gpus = list(set(supported_gpus) - set(["h200"]))
@@ -789,6 +793,12 @@ class Gepetto:
         """
         Force deploy a chute by preempting other deployments (assuming a server exists that can be used).
         """
+        if chute.ban_reason:
+            logger.warning(
+                f"Refusing to perform a preempting deploy of banned chute {chute.chute_id=}: {chute.ban_reason=}"
+            )
+            return
+
         supported_gpus = list(chute.supported_gpus)
         if "h200" in supported_gpus and set(supported_gpus) - set(["h200"]):
             supported_gpus = list(set(supported_gpus) - set(["h200"]))
@@ -1106,6 +1116,40 @@ class Gepetto:
                         f"Deployment is still a stub after 30 minutes, deleting! {deployment.deployment_id}"
                     )
                     await session.delete(deployment)
+
+                # Check for crashlooping deployments.
+                if (
+                    not deployment.active
+                    or not deployment.verified_at
+                    and datetime.now(timezone.utc) - deployment.created_at >= timedelta(minutes=5)
+                ):
+                    kd = await k8s.get_deployment(deployment.deployment_id)
+                    destroyed = False
+                    for pod in kd["pods"]:
+                        if (
+                            pod["restart_count"] > 3
+                            and pod.get("state", {}).get("waiting", {}).get("reason")
+                            == "CrashLoopBackOff"
+                        ):
+                            logger.warning(
+                                f"Deployment cannot run, purging: {deployment.deployment_id} and banning {deployment.chute_id=}"
+                            )
+                            await self.undeploy(deployment.deployment_id)
+                            destroyed = True
+
+                            # Blacklist chutes that crashloop, although this could be dangerous if the crashes
+                            # are not because of the chutes themselves...
+                            if (
+                                chute := await self.load_chute(
+                                    deployment.chute_id, deployment.version, deployment.validator
+                                )
+                            ) is not None:
+                                chute.ban_reason = (
+                                    "Chute reached crashloop/terminated state and never ran."
+                                )
+                            break
+                    if destroyed:
+                        continue
 
                 # Track the list of deployments so we can reconsile with k8s state.
                 all_deployments.add(deployment.deployment_id)

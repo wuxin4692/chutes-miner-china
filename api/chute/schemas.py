@@ -24,5 +24,6 @@ class Chute(Base):
     gpu_count = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    ban_reason = Column(String, nullable=True)
 
     deployments = relationship("Deployment", back_populates="chute", cascade="all, delete-orphan")

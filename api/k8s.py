@@ -118,9 +118,36 @@ def _extract_deployment_info(deployment: Any) -> Dict:
     )
     deploy_info["pods"] = []
     for pod in pods.items:
+        state = pod.status.container_statuses[0].state if pod.status.container_statuses else None
+        last_state = (
+            pod.status.container_statuses[0].last_state if pod.status.container_statuses else None
+        )
         pod_info = {
             "name": pod.metadata.name,
             "phase": pod.status.phase,
+            "restart_count": pod.status.container_statuses[0].restart_count
+            if pod.status.container_statuses
+            else 0,
+            "state": {
+                "running": state.running.to_dict() if state and state.running else None,
+                "terminated": state.terminated.to_dict() if state and state.terminated else None,
+                "waiting": state.waiting.to_dict() if state and state.waiting else None,
+            }
+            if state
+            else None,
+            "last_state": {
+                "running": last_state.running.to_dict()
+                if last_state and last_state.running
+                else None,
+                "terminated": last_state.terminated.to_dict()
+                if last_state and last_state.terminated
+                else None,
+                "waiting": last_state.waiting.to_dict()
+                if last_state and last_state.waiting
+                else None,
+            }
+            if last_state
+            else None,
         }
         deploy_info["pods"].append(pod_info)
         deploy_info["node"] = pod.spec.node_name
