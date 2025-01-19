@@ -298,7 +298,6 @@ class Gepetto:
                     # If there are no metrics, it means the chute is not being actively used, so don't scale.
                     metrics = self.remote_metrics.get(validator, {}).get(chute_id, {})
                     if not metrics:
-                        logger.info(self.remote_metrics)
                         logger.info(f"No metrics for {chute_id=}, scaling would be unproductive...")
                         continue
 
