@@ -2,13 +2,14 @@
 Routes for server management.
 """
 
+import aiohttp
 import orjson as json
 from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import StreamingResponse
 from sqlalchemy import select, exists, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db_session
-from api.config import k8s_core_client, settings
+from api.config import k8s_core_client, settings, validator_by_hotkey
 from api.auth import authorize
 from api.server.schemas import Server, ServerArgs
 from api.server.util import bootstrap_server
@@ -65,6 +66,24 @@ async def create_server(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Server with name={server_args.name} is already provisioned!",
+        )
+
+    # Validate short ref.
+    validator = validator_by_hotkey(server_args.validator)
+    supported_gpus = set([])
+    try:
+        async with aiohttp.ClientSession(raise_for_status=True) as s:
+            async with s.get(f"{validator.api}/nodes/supported") as resp:
+                supported_gpus = set(await resp.json())
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching validator's supported GPUs to check short ref: {exc}",
+        )
+    if server_args.gpu_short_ref not in supported_gpus:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{server_args.gpu_short_ref} is not supported by validator {server_args.validator}: {supported_gpus}",
         )
 
     # Stream creation/provisioning details back as they occur.

@@ -2,8 +2,7 @@
 Server (kubernetes node) tracking ORM.
 """
 
-from pydantic import BaseModel, Field
-from typing import Literal
+from pydantic import BaseModel
 from sqlalchemy import Column, String, DateTime, Integer, BigInteger, Float, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -15,26 +14,7 @@ class ServerArgs(BaseModel):
     name: str
     validator: str
     hourly_cost: float
-    gpu_short_ref: Literal[
-        "3090",
-        "4090",
-        "a4000",
-        "a5000",
-        "a6000",
-        "a6000_ada",
-        "l4",
-        "t4",
-        "a30",
-        "a40",
-        "l40",
-        "l40s",
-        "a100_40gb",
-        "a100",
-        "a100_sxm",
-        "h100",
-        "h100_sxm",
-        "h200",
-    ] = Field(description="GPU model identifier")
+    gpu_short_ref: str
 
 
 class Server(Base):
