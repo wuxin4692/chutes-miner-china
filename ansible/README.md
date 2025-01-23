@@ -2,6 +2,26 @@
 
 To ensure the highest probability of success, you should provision your servers with `Ubuntu 22.04`, preferably with NO nvidia driver installations if possible.
 
+### Networking note before starting!!!
+
+Before doing anything, you should check the IP addresses used by your server provider, and make sure you do not use an overlapping network for wireguard. By default, chutes uses 192.168.0.0/20 for this purpose, but that may conflict with some providers, e.g. Nebius through Shadeform sometimes uses 192.168.x.x network space.  If the network overlaps, you will have conflicting entries in your route table and the machine may basically get bricked as a result.
+
+It's quite trivial to use a different network for wireguard, or even just a different non-overlapping range in the 192.168.x.x space, but only if you start initially with that network.  To migrate after you've already setup the miner with a different wireguard network config is a bit of effort.
+
+To use a different range, simply update these four files:
+1. `join-cluster.yml` contains a regex to search for the proper network join command, needs to be updated if not using 192.168*
+2. `templates/wg0-worker.conf.j2` specifies 192.168.0.0/20 for the wireguard network, you can change this or restrict it, e.g. `192.168.254.0/24` or use an entirely different private network like `10.99.0.0/23` or whatever, just be cognizant of your CIDR
+3. `templates/wg0-primary.conf.j2` ditto with the worker config, CIDRs must match
+4. `inventory.yml` obviously your hosts will ned the updated wireguard_ip values to match
+
+I would NOT recommend changing the wireguard network if you are already running, unless you absolutely need to.  And if you do, the best bet is to actually completely wipe microk8s and start over with running each of wireguard, site, and extras playbooks, meaning you'd have to:
+1. `chutes-miner scorch-remote ...` to purge all instances/GPUs from the validator
+2. `sudo snap remove microk8s` on each node, GPU and CPU
+3. Re-install all the things.
+4. Re-add all the nodes.
+
+There are three main private networks you could use: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, and you can sometimes get away with using the carrier NAT range 100.64.0.0/10.  Those are HUGE IP ranges and you can almost certainly get away with using a /24, unless you plan to add more than 256 nodes to your miner. /23 doubles, /22 doubles that, etc.  Just pick a range that's unlikely to be used, or check servers on your server provider of choice before making a selection.
+
 ## 1. Install ansible (on your local system, not the miner node(s))
 
 ### Mac
