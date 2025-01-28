@@ -1122,7 +1122,13 @@ class Gepetto:
                     or not deployment.verified_at
                     and datetime.now(timezone.utc) - deployment.created_at >= timedelta(minutes=5)
                 ):
-                    kd = await k8s.get_deployment(deployment.deployment_id)
+                    try:
+                        kd = await k8s.get_deployment(deployment.deployment_id)
+                    except Exception as exc:
+                        if "Not Found" in str(exc) or "(404)" in str(exc):
+                            await self.undeploy(deployment.deployment_id)
+                        continue
+
                     destroyed = False
                     for pod in kd["pods"]:
                         if (
