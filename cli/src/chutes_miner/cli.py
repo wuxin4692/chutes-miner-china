@@ -317,6 +317,28 @@ def scorch_remote(
     asyncio.run(_scorch_remote())
 
 
+def delete_remote(
+    gpu_id: str = typer.Option(help="GPU UUID to delete, aka node_node on validator side"),
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    validator_api: str = typer.Option("https://api.chutes.ai", help="Validator API base URL"),
+):
+    """
+    Delete a single GPU from validator.
+    """
+
+    async def _delete_remote():
+        nonlocal hotkey, validator_api, gpu_id
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, _ = sign_request(hotkey, purpose="nodes", remote=True)
+            async with session.delete(
+                f"{validator_api.rstrip('/')}/nodes/{gpu_id}",
+                headers=headers,
+            ) as _:
+                print(f"  successfully deleted {gpu_id}")
+
+    asyncio.run(_delete_remote())
+
+
 async def _lock_or_unlock_server(lock: bool, name: str, hotkey: str, miner_api: str):
     async with aiohttp.ClientSession(raise_for_status=True) as session:
         headers, _ = sign_request(hotkey, purpose="management")
@@ -370,6 +392,9 @@ app.command(name="local-inventory", help="Show local inventory")(local_inventory
 app.command(name="remote-inventory", help="Show remote inventory")(remote_inventory)
 app.command(name="scorch-remote", help="Purge all GPUs/instances/etc. from validator")(
     scorch_remote
+)
+app.command(name="delete-remote", help="Remove a single GPU from validator inventory")(
+    delete_remote
 )
 app.command(name="lock", help="Lock a server's deployments")(lock_server)
 app.command(name="unlock", help="Unlock a server's deployments")(unlock_server)
