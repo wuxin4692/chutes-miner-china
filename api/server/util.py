@@ -235,7 +235,7 @@ async def deploy_graval(
                                     command=[
                                         "/bin/sh",
                                         "-c",
-                                        "curl -f http://127.0.0.1:8000/_alive || exit 1",
+                                        "curl -f http://127.0.0.1:8000/ping || exit 1",
                                     ]
                                 ),
                                 initial_delay_seconds=15,
