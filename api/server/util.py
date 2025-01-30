@@ -24,7 +24,7 @@ from kubernetes.client import (
     V1ServiceSpec,
     V1ServicePort,
     V1Probe,
-    V1HTTPGetAction,
+    V1ExecAction,
     V1EnvVar,
 )
 from sqlalchemy import update, select
@@ -231,7 +231,13 @@ async def deploy_graval(
                             ),
                             ports=[{"containerPort": 8000}],
                             readiness_probe=V1Probe(
-                                http_get=V1HTTPGetAction(path="/ping", port=8000),
+                                _exec=V1ExecAction(
+                                    command=[
+                                        "/bin/sh",
+                                        "-c",
+                                        "curl -f http://127.0.0.1:8000/_alive || exit 1",
+                                    ]
+                                ),
                                 initial_delay_seconds=15,
                                 period_seconds=10,
                                 timeout_seconds=1,
