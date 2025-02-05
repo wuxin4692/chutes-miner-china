@@ -2,7 +2,7 @@
 PrivateKey = {{ wg_private_key }}
 Address = {{ wireguard_ip }}/20
 ListenPort = 51820
-MTU = 1420
+MTU = 1380
 
 {% for host in hostvars %}
 {% if hostvars[host]['is_primary']|bool %}
