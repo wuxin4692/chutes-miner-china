@@ -108,6 +108,7 @@ all:
       wireguard_ip: 192.168.0.1
       gpu_enabled: false
       is_primary: true
+      wireguard_mtu: 1420  # optional (default is 1380)
 
     # These are the GPU nodes, which actually run the chutes.
     chutes-miner-gpu-0:
