@@ -31,6 +31,8 @@ all:
     skip_cuda: false
     # Flag to enable/disable IPv6. Some hosts may require IPv6 to be on.
     ipv6_enabled: true
+    # Default MTU
+    wireguard_mtu: 1380
 
   hosts:
     # This would be the main node, which runs postgres, redis, gepetto, etc.
