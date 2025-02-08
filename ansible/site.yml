@@ -572,3 +572,11 @@
         sysctl_set: yes
         reload: yes
       when: is_primary | bool
+
+    - name: Fix containerd
+      shell: |
+        DISABLED=$(egrep 'disabled_plugins' /etc/containerd/config.toml | grep -v 'disabled_plugins = \[\]')
+        if [ ! -z "$PKGS" ]; then
+          perl -pi -e 's/^\s*disabled_plugins\s*=/##disabled_plugins = []/g' /etc/containerd/config.toml
+          systemctl restart containerd
+        fi
