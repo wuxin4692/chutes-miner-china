@@ -22,6 +22,7 @@
         name: unattended-upgrades
         state: stopped
         enabled: no
+      ignore_errors: true
 
     - name: Create user
       user:

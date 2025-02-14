@@ -29,6 +29,16 @@
       with_items: "{{ groups['all'] }}"
       run_once: true
 
+    - name: Ensure ping is installed
+      apt:
+        name:
+          - iputils-ping
+        state: present
+
+    - name: disable ufw
+      shell: ufw disable
+      ignore_errors: yes
+
     - name: Update apt cache
       apt:
         update_cache: yes
