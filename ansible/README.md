@@ -22,6 +22,10 @@ I would NOT recommend changing the wireguard network if you are already running,
 
 There are three main private networks you could use: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, and you can sometimes get away with using the carrier NAT range 100.64.0.0/10.  Those are HUGE IP ranges and you can almost certainly get away with using a /24, unless you plan to add more than 256 nodes to your miner. /23 doubles, /22 doubles that, etc.  Just pick a range that's unlikely to be used, or check servers on your server provider of choice before making a selection.
 
+#### external_ip
+
+The chutes API/validator sends traffic directly to each GPU node, and does not route through the main CPU node at all. For the system to work, this means each GPU node must have a publicly routeable IP address on each GPU node that is not behind a shared IP (since it uses kubernetes nodePort services).  This IP is the public IPv4, and must not be something in the private IP range like 192.168.0.0/16, 10.0.0.0/8, etc.
+
 ## 1. Install ansible (on your local system, not the miner node(s))
 
 ### Mac
