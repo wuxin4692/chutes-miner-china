@@ -364,7 +364,7 @@ chutes-miner add-node \
 
 - `--name` here corresponds to the short name in your ansible inventory.yaml file, it is not the entire FQDN.
 - `--validator` is the hotkey ss58 address of the validator that this server will be allocated to
-- `--hourly-cost` is how much you are paying hourly per GPU this server; part of the optimization strategy in gepetto is to minimize cost when selecting servers to deploy chutes on
+- `--hourly-cost` is how much you are paying hourly per GPU on this server; part of the optimization strategy in gepetto is to minimize cost when selecting servers to deploy chutes on
 - `--gpu-short-ref` is a short identifier string for the type of GPU on the server, e.g. `a6000`, `l40s`, `h100_sxm`, etc.  The list of supported GPUs can be found [here](https://github.com/rayonlabs/chutes-api/blob/main/api/gpu.py)
 - `--hotkey` is the path to the hotkey file you registered with, used to sign requests to be able to manage inventory on your system via the miner API
 - `--miner-api` is the base URL to your miner API service, which will be http://[non-GPU node IP]:[minerAPI port, default 32000], i.e. find the public/external IP address of your CPU-only node, and whatever port you configured for the API service (which is 32000 if you didn't change the default).
