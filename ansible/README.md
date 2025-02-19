@@ -65,6 +65,24 @@ ansible-galaxy collection install community.general
 ansible-galaxy collection install kubernetes.core
 ```
 
+## OPTIONAL: Performance Tweaks for Ansible 
+
+```bash
+wget https://files.pythonhosted.org/packages/source/m/mitogen/mitogen-0.3.22.tar.gz
+tar mitogen-0.3.22.tar.gz
+```
+
+Then in your ansible.cfg
+
+```
+[defaults]
+strategy_plugins = /path/to/mitogen-0.3.22/ansible_mitogen/plugins/strategy
+strategy = mitogen_linear
+... leave the rest, and add this block below
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=2m
+```
+
 ## 3. Update inventory configuration
 
 Using your favorite text editor (vim of course), edit inventory.yml to suite your needs.
