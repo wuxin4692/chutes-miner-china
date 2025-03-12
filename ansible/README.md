@@ -69,7 +69,7 @@ ansible-galaxy collection install kubernetes.core
 
 ```bash
 wget https://files.pythonhosted.org/packages/source/m/mitogen/mitogen-0.3.22.tar.gz
-tar mitogen-0.3.22.tar.gz
+tar -xzf mitogen-0.3.22.tar.gz
 ```
 
 Then in your ansible.cfg
