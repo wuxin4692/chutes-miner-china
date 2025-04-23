@@ -275,7 +275,7 @@ class Gepetto:
         # Load chute utilization to see if it can scale.
         scalable = {}
         for validator in settings.validators:
-            scalable[validator] = {}
+            scalable[validator.hotkey] = {}
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.get(f"{validator.api}/chutes/utilization") as resp:
