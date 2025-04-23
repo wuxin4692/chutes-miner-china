@@ -281,7 +281,7 @@ class Gepetto:
                     async with session.get(f"{validator.api}/chutes/utilization") as resp:
                         for item in await resp.json():
                             if item.get("scalable") is False:
-                                scalable[validator][item["chute_id"]] = False
+                                scalable[validator.hotkey][item["chute_id"]] = False
                                 logger.warning(
                                     f"Chute {item['chute_id']} is capped due to utilization: {item}"
                                 )
