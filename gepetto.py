@@ -285,6 +285,11 @@ class Gepetto:
                                 logger.warning(
                                     f"Chute {item['chute_id']} is capped due to utilization: {item}"
                                 )
+                            if item.get("update_in_progress") is True:
+                                scalable[validator.hotkey][item["chute_id"]] = False
+                                logger.warning(
+                                    f"Chute {item['chute_id']} is updating, cannot scale now: {item}"
+                                )
                 except Exception as exc:
                     logger.error(f"Failed to fetch chute utilization from {validator=}: {exc}")
 
