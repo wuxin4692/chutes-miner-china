@@ -701,7 +701,7 @@ class Gepetto:
             return
 
         # Remove the instance/deployment.
-        server = None
+        server_id = None
         async with get_session() as session:
             deployment = (
                 (
@@ -712,9 +712,10 @@ class Gepetto:
                 .unique()
                 .scalar_one_or_none()
             )
-        if deployment:
-            server = deployment.server
-            await self.undeploy(deployment.deployment_id)
+            if deployment:
+                server_id = deployment.server.server_id
+                await self.undeploy(deployment.deployment_id)
+            deployment = None
 
         # Make sure the local chute is updated.
         if (chute := await self.load_chute(chute_id, version, validator_hotkey)) is None:
@@ -767,18 +768,18 @@ class Gepetto:
                 await k8s.create_code_config_map(chute)
 
         # Deploy the new version.
-        if server:
-            logger.info(f"Attempting to deploy {chute.chute_id=} on {server.name=}")
+        if server_id:
+            logger.info(f"Attempting to deploy {chute.chute_id=} on {server_id=}")
             deployment = None
             try:
-                deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
+                deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute.chute_id, server_id)
                 logger.success(
-                    f"Successfully updated {chute_id=} to {version=} on {server.name=}: {deployment.deployment_id=}"
+                    f"Successfully updated {chute_id=} to {version=} on {server_id=}: {deployment.deployment_id=}"
                 )
                 await self.announce_deployment(deployment)
             except DeploymentFailure as exc:
                 logger.error(
-                    f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
+                    f"Unhandled error attempting to deploy {chute.chute_id=} on {server_id=}: {exc}\n{traceback.format_exc()}"
                 )
                 if deployment:
                     await self.undeploy(deployment.deployment_id)
@@ -1065,20 +1066,12 @@ class Gepetto:
             for deployment_id in to_preempt:
                 await self.undeploy(deployment_id)
 
-        # Deploy on our target server (which we need to reload from DB).
-        async with get_session() as session:
-            target_server = (
-                (
-                    await session.execute(
-                        select(Server).where(Server.server_id == target_server.server_id)
-                    )
-                )
-                .unique()
-                .scalar_one_or_none()
-            )
+        # Deploy on our target server.
         deployment = None
         try:
-            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, target_server)
+            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(
+                chute.chute_id, target_server.server_id
+            )
             logger.success(
                 f"Successfully deployed {chute.chute_id=} via preemption on {server.server_id=}: {deployment.deployment_id=}"
             )
@@ -1141,7 +1134,9 @@ class Gepetto:
                         )
                         deployment = None
                         try:
-                            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
+                            deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(
+                                chute.chute_id, server.server_id
+                            )
                             logger.success(
                                 f"Successfully deployed {chute.chute_id=} on {server.server_id=}: {deployment.deployment_id=}"
                             )

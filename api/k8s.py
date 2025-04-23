@@ -302,27 +302,44 @@ async def create_code_config_map(chute: Chute):
 #    return sorted(list(ports))
 
 
-async def deploy_chute(chute: Chute, server: Server):
+async def deploy_chute(chute_id: str, server_id: str):
     """
     Deploy a chute!
     """
-
-    # Make sure the node has capacity.
-    # used_ports = get_used_ports(server.name)
-    gpus_allocated = 0
-    available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
-    for deployment in server.deployments:
-        gpus_allocated += len(deployment.gpus)
-        available_gpus -= {gpu.gpu_id for gpu in deployment.gpus}
-    if len(server.gpus) - gpus_allocated - chute.gpu_count < 0:
-        raise DeploymentFailure(
-            f"Server {server.server_id} name={server.name} cannot allocate {chute.gpu_count} GPUs, already using {gpus_allocated} of {len(server.gpus)}"
-        )
-
-    # Immediately track this deployment (before actually creating it) to avoid allocation contention.
-    deployment_id = str(uuid.uuid4())
-    gpus = list([gpu for gpu in server.gpus if gpu.gpu_id in available_gpus])[: chute.gpu_count]
+    # Backwards compatible types...
+    if isinstance(chute_id, Chute):
+        chute_id = chute_id.chute_id
+    if isinstance(server_id, Server):
+        server_id = server_id.server_id
     async with get_session() as session:
+        chute = (
+            (await session.execute(select(Chute).where(Chute.chute_id == chute_id)))
+            .unique()
+            .scalar_one_or_none()
+        )
+        server = (
+            (await session.execute(select(Server).where(Server.server_id == server_id)))
+            .unique()
+            .scalar_one_or_none()
+        )
+        if not chute or not server:
+            raise DeploymentFailure(f"Failed to find chute or server: {chute_id=} {server_id=}")
+
+        # Make sure the node has capacity.
+        # used_ports = get_used_ports(server.name)
+        gpus_allocated = 0
+        available_gpus = {gpu.gpu_id for gpu in server.gpus if gpu.verified}
+        for deployment in server.deployments:
+            gpus_allocated += len(deployment.gpus)
+            available_gpus -= {gpu.gpu_id for gpu in deployment.gpus}
+        if len(server.gpus) - gpus_allocated - chute.gpu_count < 0:
+            raise DeploymentFailure(
+                f"Server {server.server_id} name={server.name} cannot allocate {chute.gpu_count} GPUs, already using {gpus_allocated} of {len(server.gpus)}"
+            )
+
+        # Immediately track this deployment (before actually creating it) to avoid allocation contention.
+        deployment_id = str(uuid.uuid4())
+        gpus = list([gpu for gpu in server.gpus if gpu.gpu_id in available_gpus])[: chute.gpu_count]
         deployment = Deployment(
             deployment_id=deployment_id,
             server_id=server.server_id,
