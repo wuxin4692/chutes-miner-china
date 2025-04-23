@@ -50,6 +50,9 @@ async def get_kubernetes_nodes() -> List[Dict]:
     try:
         node_list = k8s_core_client().list_node(field_selector=None, label_selector="chutes/worker")
         for node in node_list.items:
+            if not node.status.capacity or not node.status.capacity.get("nvidia.com/gpu"):
+                logger.warning(f"Node has no GPU capacity: {node.metadata.name=}")
+                continue
             gpu_count = int(node.status.capacity["nvidia.com/gpu"])
             gpu_mem_mb = int(node.metadata.labels.get("nvidia.com/gpu.memory", "32"))
             gpu_mem_gb = int(gpu_mem_mb / 1024)

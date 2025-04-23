@@ -280,7 +280,7 @@ class Gepetto:
                 try:
                     async with session.get(f"{validator.api}/chutes/utilization") as resp:
                         for item in await resp.json():
-                            if not item.get("scalable"):
+                            if item.get("scalable") is False:
                                 scalable[validator][item["chute_id"]] = False
                                 logger.warning(
                                     f"Chute {item['chute_id']} is capped due to utilization: {item}"
@@ -700,7 +700,7 @@ class Gepetto:
             logger.warning(f"Validator not found: {validator_hotkey}")
             return
 
-        # Remove this instance/deployment.
+        # Remove the instance/deployment.
         server = None
         async with get_session() as session:
             deployment = (
