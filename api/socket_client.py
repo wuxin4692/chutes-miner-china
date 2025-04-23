@@ -74,6 +74,7 @@ class SocketClient:
                 "image_deleted",
                 "instance_deleted",
                 "instance_verified",
+                "rolling_update",
             ):
                 logger.warning(f"Ignoring invalid broadcast: {data}")
                 return

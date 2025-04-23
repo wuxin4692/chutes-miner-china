@@ -48,6 +48,7 @@ class Gepetto:
         self.pubsub.on_event("gpu_deleted")(self.gpu_deleted)
         self.pubsub.on_event("instance_verified")(self.instance_verified)
         self.pubsub.on_event("instance_deleted")(self.instance_deleted)
+        self.pubsub.on_event("rolling_update")(self.rolling_update)
         self.pubsub.on_event("chute_deleted")(self.chute_deleted)
         self.pubsub.on_event("chute_created")(self.chute_created)
         self.pubsub.on_event("chute_updated")(self.chute_updated)
@@ -170,32 +171,30 @@ class Gepetto:
             "host": deployment.host,
             "port": deployment.port,
         }
-        async with aiohttp.ClientSession(raise_for_status=True) as session:
-            headers, payload_string = sign_request(payload=body)
-            async with session.post(
-                f"{vali.api}/instances/{deployment.chute_id}/",
-                headers=headers,
-                data=payload_string,
-            ) as resp:
-                instance = await resp.json()
+        try:
+            async with aiohttp.ClientSession(raise_for_status=True) as session:
+                headers, payload_string = sign_request(payload=body)
+                async with session.post(
+                    f"{vali.api}/instances/{deployment.chute_id}/",
+                    headers=headers,
+                    data=payload_string,
+                ) as resp:
+                    instance = await resp.json()
 
-                # Track the instance ID.
-                async with get_session() as session:
-                    deployment = (
-                        (
-                            await session.execute(
-                                select(Deployment).where(
-                                    Deployment.deployment_id == deployment.deployment_id
-                                )
-                            )
+                    # Track the instance ID.
+                    async with get_session() as session:
+                        await session.execute(
+                            update(Deployment)
+                            .where(Deployment.deployment_id == deployment.deployment_id)
+                            .values({"instance_id": instance["instance_id"]})
                         )
-                        .unique()
-                        .scalar_one_or_none()
-                    )
-                    if deployment:
-                        deployment.instance_id = instance["instance_id"]
                         await session.commit()
-                logger.success(f"Successfully advertised instance: {instance['instance_id']}")
+                    logger.success(f"Successfully advertised instance: {instance['instance_id']}")
+        except Exception as exc:
+            logger.warning(f"Error announcing deployment: {exc}\n{traceback.format_exc()}")
+            raise DeploymentFailure(
+                f"Failed to announce deployment {deployment.deployment_id}: {exc=}"
+            )
 
     async def activate(self, deployment: Deployment):
         """
@@ -273,6 +272,22 @@ class Gepetto:
                 self.remote_metrics, validator.hotkey, f"{validator.api}/miner/metrics/", "chute_id"
             )
 
+        # Load chute utilization to see if it can scale.
+        scalable = {}
+        for validator in settings.validators:
+            scalable[validator] = {}
+            async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.get(f"{validator.api}/chutes/utilization") as resp:
+                        for item in await resp.json():
+                            if not item.get("scalable"):
+                                scalable[validator][item["chute_id"]] = False
+                                logger.warning(
+                                    f"Chute {item['chute_id']} is capped due to utilization: {item}"
+                                )
+                except Exception as exc:
+                    logger.error(f"Failed to fetch chute utilization from {validator=}: {exc}")
+
         # Count the number of deployments for each chute
         chute_values = []
         for validator, chutes in self.remote_chutes.items():
@@ -281,16 +296,13 @@ class Gepetto:
                     chute = await self.load_chute(chute_id, chute_info["version"], validator)
                     if not chute:
                         continue
+                    if scalable.get(validator, {}).get(chute_id) not in (None, True):
+                        continue
 
                     # Count how many deployments we already have.
                     local_count = await self.count_deployments(
                         chute_id, chute_info["version"], validator
                     )
-                    if local_count > 3:
-                        logger.warning(f"Too many instances of {chute_id=}, scaling down!")
-                        await self.scale_chute(chute, 3)
-                        continue
-
                     if local_count >= 3:
                         logger.info(f"Already have max instances of {chute_id=}")
                         continue
@@ -674,6 +686,104 @@ class Gepetto:
         if not current_count:
             await self.scale_chute(chute, desired_count=desired_count, preempt=False)
 
+    async def rolling_update(self, event_data: Dict[str, Any]):
+        """
+        A rolling update event, meaning we need to re-create a single instance.
+        """
+        chute_id = event_data["chute_id"]
+        version = event_data["version"]
+        validator_hotkey = event_data["validator"]
+        instance_id = event_data["instance_id"]
+        logger.info(f"Received rolling update event for {chute_id=} {version=} {instance_id=}")
+
+        if (validator := validator_by_hotkey(validator_hotkey)) is None:
+            logger.warning(f"Validator not found: {validator_hotkey}")
+            return
+
+        # Remove this instance/deployment.
+        server = None
+        async with get_session() as session:
+            deployment = (
+                (
+                    await session.execute(
+                        select(Deployment).where(Deployment.instance_id == instance_id)
+                    )
+                )
+                .unique()
+                .scalar_one_or_none()
+            )
+        if deployment:
+            server = deployment.server
+            await self.undeploy(deployment.deployment_id)
+
+        # Make sure the local chute is updated.
+        if (chute := await self.load_chute(chute_id, version, validator_hotkey)) is None:
+            chute_dict = None
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as session:
+                    headers, _ = sign_request(purpose="miner")
+                    async with session.get(
+                        f"{validator.api}/miner/chutes/{chute_id}/{version}", headers=headers
+                    ) as resp:
+                        chute_dict = await resp.json()
+            except Exception:
+                logger.error(f"Error loading remote chute data: {chute_id=} {version=}")
+                return
+
+            async with get_session() as db:
+                chute = (
+                    (await db.execute(select(Chute).where(Chute.chute_id == chute_id)))
+                    .unique()
+                    .scalar_one_or_none()
+                )
+                if chute:
+                    for key in (
+                        "image",
+                        "code",
+                        "filename",
+                        "ref_str",
+                        "version",
+                        "supported_gpus",
+                    ):
+                        setattr(chute, key, chute_dict.get(key))
+                    chute.gpu_count = chute_dict["node_selector"]["gpu_count"]
+                else:
+                    chute = Chute(
+                        chute_id=chute_id,
+                        validator=validator.hotkey,
+                        name=chute_dict["name"],
+                        image=chute_dict["image"],
+                        code=chute_dict["code"],
+                        filename=chute_dict["filename"],
+                        ref_str=chute_dict["ref_str"],
+                        version=chute_dict["version"],
+                        supported_gpus=chute_dict["supported_gpus"],
+                        gpu_count=chute_dict["node_selector"]["gpu_count"],
+                        ban_reason=None,
+                    )
+                    db.add(chute)
+                    await db.commit()
+                    await db.refresh(chute)
+                await k8s.create_code_config_map(chute)
+
+        # Deploy the new version.
+        if server:
+            logger.info(f"Attempting to deploy {chute.chute_id=} on {server.name=}")
+            deployment = None
+            try:
+                deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
+                logger.success(
+                    f"Successfully updated {chute_id=} to {version=} on {server.name=}: {deployment.deployment_id=}"
+                )
+                await self.announce_deployment(deployment)
+            except DeploymentFailure as exc:
+                logger.error(
+                    f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
+                )
+                if deployment:
+                    await self.undeploy(deployment.deployment_id)
+                return
+
     async def chute_updated(self, event_data: Dict[str, Any]):
         """
         A new version of a chute was published, meaning we need to replace the existing
@@ -966,6 +1076,7 @@ class Gepetto:
                 .unique()
                 .scalar_one_or_none()
             )
+        deployment = None
         try:
             deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, target_server)
             logger.success(
@@ -976,6 +1087,8 @@ class Gepetto:
             logger.error(
                 f"Error attempting to deploy {chute.chute_id=} on {server.server_id=} via preemption: {exc}\n{traceback.format_exc()}"
             )
+            if deployment:
+                await self.undeploy(deployment.deployment_id)
 
     async def scale_chute(self, chute: Chute, desired_count: int, preempt: bool = False):
         """
@@ -1026,6 +1139,7 @@ class Gepetto:
                         logger.info(
                             f"Attempting to deploy {chute.chute_id=} on {server.server_id=}"
                         )
+                        deployment = None
                         try:
                             deployment, k8s_dep, k8s_svc = await k8s.deploy_chute(chute, server)
                             logger.success(
@@ -1036,6 +1150,8 @@ class Gepetto:
                             logger.error(
                                 f"Error attempting to deploy {chute.chute_id=} on {server.server_id=}: {exc}\n{traceback.format_exc()}"
                             )
+                            if deployment:
+                                await self.undeploy(deployment.deployment_id)
                             return
 
     async def reconsile(self):
