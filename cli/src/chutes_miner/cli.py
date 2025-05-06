@@ -285,6 +285,26 @@ def purge_deployments(
 
     asyncio.run(_purge_deployments())
 
+def purge_deployment(
+    deployment_id: str = typer.Argument(..., help="The ID of the deployment to purge."),
+    hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
+    miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL")
+):
+    """
+    Purge the target deployment
+    """
+
+    async def _purge_deployment():
+        nonlocal deployment_id, hotkey, miner_api
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            headers, payload_string = sign_request(hotkey, purpose="management")
+            async with session.delete(
+                f"{miner_api.rstrip('/')}/deployments/{deployment_id}/purge",
+                headers=headers,
+            ) as resp:
+                print(json.dumps(await resp.json(), indent=2))
+
+    asyncio.run(_purge_deployment())
 
 def scorch_remote(
     hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
@@ -388,6 +408,9 @@ app.command(name="delete-node", help="Delete a kubernetes node from your cluster
 app.command(
     name="purge-deployments", help="Purge all deployments, allowing autoscale from scratch"
 )(purge_deployments)
+app.command(
+    name="purge-deployment", help="Purge the target deployment"
+)(purge_deployment)
 app.command(name="local-inventory", help="Show local inventory")(local_inventory)
 app.command(name="remote-inventory", help="Show remote inventory")(remote_inventory)
 app.command(name="scorch-remote", help="Purge all GPUs/instances/etc. from validator")(

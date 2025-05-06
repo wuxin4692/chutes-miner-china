@@ -43,3 +43,33 @@ async def purge(
         "status": "initiated",
         "deployments_purged": deployments,
     }
+
+@router.delete("/{deployment_id}/purge")
+async def purge_deployment(
+    deployment_id: str,
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(authorize(allow_miner=True, purpose="management")),
+):
+    """
+    Purge all deployments, allowing gepetto to re-scale for max $$$
+    """
+    gepetto = Gepetto()
+    deployment = (
+        (
+            await db.execute(
+                select(Deployment).where(Deployment.deployment_id == deployment_id)
+            )
+        )
+        .unique()
+        .scalar_one_or_none()
+    )
+
+    logger.warning(
+        f"Initiating deletion of {deployment.deployment_id}: {deployment.chute.name} from server {deployment.server.name}"
+    )
+
+    asyncio.create_task(gepetto.undeploy(deployment.deployment_id))
+    return {
+        "status": "initiated",
+        "deployment_purged": deployment,
+    }
