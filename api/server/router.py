@@ -173,9 +173,15 @@ async def purge_server(
             await db.execute(
                 select(Deployment)
                 .join(Deployment.server)
-                .where((Deployment.server_id == id_or_name) | (Server.name == id_or_name))
+                .where(
+                    or_(
+                        Deployment.server_id == id_or_name,
+                        Server.name == id_or_name,
+                    ),
+                )
             )
         )
+        .unique()
         .scalars()
         .all()
     ):
