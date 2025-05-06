@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.sql.selectable import Select
 from fastapi.testclient import TestClient
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from api.deployment.router import router, purge, purge_deployment
 from api.deployment.schemas import Deployment
@@ -148,17 +148,17 @@ async def test_purge_server_endpoint(mock_db_session, mock_deployment):
 async def test_purge_invalid_deployment_id(mock_db_session):
     """Test purge_deployment with an invalid deployment ID."""
     # Set up mock query result for no deployments
-    mock_result = AsyncMock()
+    mock_result = MagicMock()
     mock_result.unique.return_value = mock_result
     mock_result.scalar_one_or_none.return_value = None
-    mock_db_session.execute.return_value = mock_result
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # Mock Gepetto
     mock_gepetto = MagicMock()
 
     with patch("api.deployment.router.Gepetto", return_value=mock_gepetto):
-        # This should raise an AttributeError because the deployment is None
-        with pytest.raises(AttributeError):
+        # This should raise an HTTPException because the deployment is None
+        with pytest.raises(HTTPException) as err:
             await purge_deployment(deployment_id="nonexistent-id", db=mock_db_session)
 
 
