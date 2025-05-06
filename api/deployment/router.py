@@ -44,6 +44,7 @@ async def purge(
         "deployments_purged": deployments,
     }
 
+
 @router.delete("/{deployment_id}/purge")
 async def purge_deployment(
     deployment_id: str,
@@ -55,11 +56,7 @@ async def purge_deployment(
     """
     gepetto = Gepetto()
     deployment = (
-        (
-            await db.execute(
-                select(Deployment).where(Deployment.deployment_id == deployment_id)
-            )
-        )
+        (await db.execute(select(Deployment).where(Deployment.deployment_id == deployment_id)))
         .unique()
         .scalar_one_or_none()
     )

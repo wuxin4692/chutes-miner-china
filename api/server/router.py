@@ -156,6 +156,7 @@ async def delete_server(
         "detail": f"Deletion of {server.name=} {server.server_id=} started, and will be processed asynchronously by gepetto.",
     }
 
+
 @router.delete("/{id_or_name}/purge")
 async def purge_server(
     id_or_name: str,
@@ -171,10 +172,7 @@ async def purge_server(
             await db.execute(
                 select(Deployment)
                 .join(Deployment.server)
-                .where(
-                    (Deployment.server_id == id_or_name) | 
-                    (Server.name == id_or_name)
-                )
+                .where((Deployment.server_id == id_or_name) | (Server.name == id_or_name))
             )
         )
         .unique()
