@@ -7,6 +7,7 @@ __pycache__/
 *.so
 
 test*.py
+!tests/**/*
 .localenv
 *.bak
 
@@ -54,6 +55,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+__pycache__
 
 # Translations
 *.mo
@@ -81,6 +83,9 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# VS Code
+.vscode
 
 # IPython
 profile_default/
