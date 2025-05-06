@@ -307,14 +307,14 @@ def purge_deployment(
         raise typer.Exit(1)
 
     target_id = deployment_id or node_id
-    endpoint = "deployments" if deployment_id else "servers"
+    endpoint = f"deployments/{target_id}" if deployment_id else f"servers/{target_id}/deployments"
 
     async def _purge_deployment():
         nonlocal target_id, hotkey, miner_api, endpoint
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, payload_string = sign_request(hotkey, purpose="management")
             async with session.delete(
-                f"{miner_api.rstrip('/')}/{endpoint}/{target_id}/purge",
+                f"{miner_api.rstrip('/')}/{endpoint}",
                 headers=headers,
             ) as resp:
                 print(json.dumps(await resp.json(), indent=2))

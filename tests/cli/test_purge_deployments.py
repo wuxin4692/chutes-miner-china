@@ -110,7 +110,7 @@ def test_purge_deployment_by_id(
     # Check that the DELETE request was made to the correct endpoint
     _session.delete.assert_called_once()
     call_args = _session.delete.call_args[0][0]
-    assert call_args == f"http://test-miner-api:32000/deployments/{DEPLOYMENT_ID}/purge"
+    assert call_args == f"http://test-miner-api:32000/deployments/{DEPLOYMENT_ID}"
 
     # Check the output
     captured = capsys.readouterr()
@@ -159,7 +159,7 @@ def test_purge_deployment_by_node(
     # Check that the DELETE request was made to the correct endpoint
     _session.delete.assert_called_once()
     call_args = _session.delete.call_args[0][0]
-    assert call_args == f"http://test-miner-api:32000/servers/{SERVER_ID}/purge"
+    assert call_args == f"http://test-miner-api:32000/servers/{SERVER_ID}/deployments"
 
     # Check the output
     captured = capsys.readouterr()
@@ -208,7 +208,7 @@ def test_purge_deployment_by_node_name(
     # Check that the DELETE request was made to the correct endpoint
     _session.delete.assert_called_once()
     call_args = _session.delete.call_args[0][0]
-    assert call_args == f"http://test-miner-api:32000/servers/{SERVER_NAME}/purge"
+    assert call_args == f"http://test-miner-api:32000/servers/{SERVER_NAME}/deployments"
 
     # Check the output
     captured = capsys.readouterr()
