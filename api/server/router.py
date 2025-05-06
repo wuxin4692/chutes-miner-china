@@ -2,7 +2,9 @@
 Routes for server management.
 """
 
+import asyncio
 import aiohttp
+from loguru import logger
 import orjson as json
 from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.responses import StreamingResponse
@@ -11,8 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db_session
 from api.config import k8s_core_client, settings, validator_by_hotkey
 from api.auth import authorize
+from api.deployment.schemas import Deployment
 from api.server.schemas import Server, ServerArgs
 from api.server.util import bootstrap_server
+from gepetto import Gepetto
 
 router = APIRouter()
 
@@ -150,4 +154,39 @@ async def delete_server(
     return {
         "status": "started",
         "detail": f"Deletion of {server.name=} {server.server_id=} started, and will be processed asynchronously by gepetto.",
+    }
+
+@router.delete("/{id_or_name}/purge")
+async def purge_server(
+    id_or_name: str,
+    db: AsyncSession = Depends(get_db_session),
+    _: None = Depends(authorize(allow_miner=True, allow_validator=False, purpose="management")),
+):
+    """
+    Purges deployments from a kubernetes node in the cluster.
+    """
+    gepetto = Gepetto()
+    deployment = (
+        (
+            await db.execute(
+                select(Deployment)
+                .join(Deployment.server)
+                .where(
+                    (Deployment.server_id == id_or_name) | 
+                    (Server.name == id_or_name)
+                )
+            )
+        )
+        .unique()
+        .scalar_one_or_none()
+    )
+
+    logger.warning(
+        f"Initiating deletion of {deployment.deployment_id}: {deployment.chute.name} from server {deployment.server.name}"
+    )
+
+    asyncio.create_task(gepetto.undeploy(deployment.deployment_id))
+    return {
+        "status": "initiated",
+        "deployment_purged": deployment,
     }

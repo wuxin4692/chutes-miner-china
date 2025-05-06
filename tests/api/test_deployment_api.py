@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from api.deployment.router import router, purge, purge_deployment
 from api.deployment.schemas import Deployment
+from api.server.router import purge_server
 
 # Create test app
 app = FastAPI()
@@ -84,6 +85,41 @@ async def test_purge_deployment_endpoint(mock_db_session, mock_deployment):
             # Call the function
             response = await purge_deployment(
                 deployment_id="test-deployment-id",
+                db=mock_db_session
+            )
+            
+            # Assertions
+            assert response["status"] == "initiated"
+            assert response["deployment_purged"] == mock_deployment
+            
+            # Verify logger was called
+            mock_logger.warning.assert_called_once()
+            
+            # Verify db.execute was called with the right query
+            mock_db_session.execute.assert_called_once()
+            # Get the first positional argument of the first call
+            call_args = mock_db_session.execute.call_args[0][0]
+            # Check that it's a select query
+            assert isinstance(call_args, Select)
+
+@pytest.mark.asyncio
+async def test_purge_server_endpoint(mock_db_session, mock_deployment):
+    """Test the purge_server endpoint."""
+    # Set up mock query result for a single deployment
+    mock_result = MagicMock()
+    mock_result.unique.return_value = mock_result
+    mock_result.scalar_one_or_none.return_value = mock_deployment
+    mock_db_session.execute = AsyncMock(return_value = mock_result)
+    
+    # Mock Gepetto
+    mock_gepetto = MagicMock()
+    mock_gepetto.undeploy = AsyncMock()
+    
+    with patch('api.server.router.Gepetto', return_value=mock_gepetto):
+        with patch('api.server.router.logger') as mock_logger:
+            # Call the function
+            response = await purge_server(
+                id_or_name="test-deployment-id",
                 db=mock_db_session
             )
             

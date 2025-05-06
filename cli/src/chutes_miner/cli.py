@@ -286,7 +286,8 @@ def purge_deployments(
     asyncio.run(_purge_deployments())
 
 def purge_deployment(
-    deployment_id: str = typer.Argument(..., help="The ID of the deployment to purge."),
+    deployment_id: str = typer.Option(None, "--deployment-id", "-d", help="The ID of the deployment to purge."),
+    node_id: str = typer.Option(None, "--node-id", "-n", help="The ID of the node to purge the deployment from."),
     hotkey: str = typer.Option(..., help="Path to the hotkey file for your miner"),
     miner_api: str = typer.Option("http://127.0.0.1:32000", help="Miner API base URL")
 ):
@@ -294,12 +295,19 @@ def purge_deployment(
     Purge the target deployment
     """
 
+    if (deployment_id is None and node_id is None) or (deployment_id is not None and node_id is not None):
+        typer.echo("Error: Either deployment_id or node_id must be provided, but not both.")
+        raise typer.Exit(1)
+
+    target_id = deployment_id or node_id
+    endpoint = "deployments" if deployment_id else "servers"
+
     async def _purge_deployment():
-        nonlocal deployment_id, hotkey, miner_api
+        nonlocal target_id, hotkey, miner_api, endpoint
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             headers, payload_string = sign_request(hotkey, purpose="management")
             async with session.delete(
-                f"{miner_api.rstrip('/')}/deployments/{deployment_id}/purge",
+                f"{miner_api.rstrip('/')}/{endpoint}/{target_id}/purge",
                 headers=headers,
             ) as resp:
                 print(json.dumps(await resp.json(), indent=2))
