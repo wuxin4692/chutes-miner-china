@@ -111,7 +111,8 @@ async def test_purge_server_endpoint(mock_db_session, mock_deployment):
     # Set up mock query result for a single deployment
     mock_result = MagicMock()
     mock_result.unique.return_value = mock_result
-    mock_result.scalar_one_or_none.return_value = mock_deployment
+    mock_result.scalars.return_value = mock_result
+    mock_result.all.return_value = [mock_deployment]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # Mock Gepetto
@@ -125,7 +126,12 @@ async def test_purge_server_endpoint(mock_db_session, mock_deployment):
 
             # Assertions
             assert response["status"] == "initiated"
-            assert response["deployment_purged"] == mock_deployment
+            assert len(response["deployments_purged"]) == 1
+            assert response["deployments_purged"][0]["chute_id"] == "test-chute-id"
+            assert response["deployments_purged"][0]["chute_name"] == "test-chute-name"
+            assert response["deployments_purged"][0]["server_id"] == "test-server-id"
+            assert response["deployments_purged"][0]["server_name"] == "test-server-name"
+            assert response["deployments_purged"][0]["gpu_count"] == 2
 
             # Verify logger was called
             mock_logger.warning.assert_called_once()

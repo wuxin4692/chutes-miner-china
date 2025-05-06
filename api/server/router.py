@@ -157,7 +157,7 @@ async def delete_server(
     }
 
 
-@router.delete("/{id_or_name}/purge")
+@router.delete("/{id_or_name}/deployments")
 async def purge_server(
     id_or_name: str,
     db: AsyncSession = Depends(get_db_session),
@@ -167,7 +167,8 @@ async def purge_server(
     Purges deployments from a kubernetes node in the cluster.
     """
     gepetto = Gepetto()
-    deployment = (
+    deployments = []
+    for deployment in (
         (
             await db.execute(
                 select(Deployment)
@@ -175,16 +176,24 @@ async def purge_server(
                 .where((Deployment.server_id == id_or_name) | (Server.name == id_or_name))
             )
         )
-        .unique()
-        .scalar_one_or_none()
-    )
+        .scalars()
+        .all()
+    ):
+        deployments.append(
+            {
+                "chute_id": deployment.chute_id,
+                "chute_name": deployment.chute.name,
+                "server_id": deployment.server_id,
+                "server_name": deployment.server.name,
+                "gpu_count": len(deployment.gpus),
+            }
+        )
+        logger.warning(
+            f"Initiating deletion of {deployment.deployment_id}: {deployment.chute.name} from server {deployment.server.name}"
+        )
+        asyncio.create_task(gepetto.undeploy(deployment.deployment_id))
 
-    logger.warning(
-        f"Initiating deletion of {deployment.deployment_id}: {deployment.chute.name} from server {deployment.server.name}"
-    )
-
-    asyncio.create_task(gepetto.undeploy(deployment.deployment_id))
     return {
         "status": "initiated",
-        "deployment_purged": deployment,
+        "deployments_purged": deployments,
     }
