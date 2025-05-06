@@ -158,7 +158,7 @@ async def test_purge_invalid_deployment_id(mock_db_session):
 
     with patch("api.deployment.router.Gepetto", return_value=mock_gepetto):
         # This should raise an HTTPException because the deployment is None
-        with pytest.raises(HTTPException) as err:
+        with pytest.raises(HTTPException):
             await purge_deployment(deployment_id="nonexistent-id", db=mock_db_session)
 
 
