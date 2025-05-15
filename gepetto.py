@@ -1167,6 +1167,15 @@ class Gepetto:
             logger.error(f"Failed to refresh remote resources: {exc}")
             return
 
+        # Get the chutes currently undergoing a rolling update.
+        updating = {}
+        for validator in settings.validators:
+            updating[validator.hotkey] = {}
+            async with aiohttp.ClientSession(raise_for_status=True) as session:
+                async with session.get(f"{validator.api}/chutes/rolling_updates") as resp:
+                    for item in await resp.json():
+                        updating[validator.hotkey][item["chute_id"]] = item
+
         # Compare local items to validators' inventory.
         tasks = []
         chutes_to_remove = set()
@@ -1195,6 +1204,10 @@ class Gepetto:
                     deployment.chute_id
                 )
                 if not remote or remote["version"] != deployment.version:
+                    update = updating.get(deployment.validator, {}).get(deployment.chute_id)
+                    if update:
+                        logger.warning(f"Skipping reconsiliation for chute with rolling {update=}")
+                        continue
                     logger.warning(
                         f"Chute: {deployment.chute_id} version={deployment.version} on validator {deployment.validator} not found"
                     )
@@ -1361,6 +1374,12 @@ class Gepetto:
             for validator, chutes in self.remote_chutes.items():
                 for chute_id, config in chutes.items():
                     if f"{validator}:{chute_id}:{config['version']}" not in all_chutes:
+                        update = updating.get(validator, {}).get(chute_id)
+                        if update:
+                            logger.warning(
+                                f"Skipping chute reconsiliation for chute with rolling {update=}"
+                            )
+                            continue
                         logger.info(f"Found a new/untracked chute: {chute_id}")
                         tasks.append(
                             asyncio.create_task(
