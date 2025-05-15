@@ -1354,6 +1354,10 @@ class Gepetto:
                     or remote["version"] != chute.version
                     and identifier not in chutes_to_remove
                 ):
+                    update = updating.get(chute.validator, {}).get(chute.chute_id)
+                    if update:
+                        logger.warning(f"Skipping reconsiliation for chute with rolling {update=}")
+                        continue
                     logger.warning(
                         f"Chute: {chute.chute_id} version={chute.version} on validator {chute.validator} not found: {remote=}"
                     )
