@@ -1206,7 +1206,7 @@ class Gepetto:
                 if not remote or remote["version"] != deployment.version:
                     update = updating.get(deployment.validator, {}).get(deployment.chute_id)
                     if update:
-                        logger.warning(f"Skipping reconsiliation for chute with rolling {update=}")
+                        logger.warning(f"Skipping reconciliation for chute with rolling {update=}")
                         all_instances.add(deployment.instance_id)
                         continue
                     logger.warning(
@@ -1326,7 +1326,7 @@ class Gepetto:
                     logger.warning(
                         f"GPU {gpu.gpu_id} is no longer in validator {gpu.validator} inventory"
                     )
-                    # XXX we need this reconsiliation somehow, but API downtime is really problematic here...
+                    # XXX we need this reconciliation somehow, but API downtime is really problematic here...
                     # tasks.append(
                     #     asyncio.create_task(
                     #         self.gpu_deleted({"gpu_id": gpu.gpu_id, "validator": gpu.validator})
@@ -1357,7 +1357,7 @@ class Gepetto:
                 ):
                     update = updating.get(chute.validator, {}).get(chute.chute_id)
                     if update:
-                        logger.warning(f"Skipping reconsiliation for chute with rolling {update=}")
+                        logger.warning(f"Skipping reconciliation for chute with rolling {update=}")
                         continue
                     logger.warning(
                         f"Chute: {chute.chute_id} version={chute.version} on validator {chute.validator} not found: {remote=}"
@@ -1382,7 +1382,7 @@ class Gepetto:
                         update = updating.get(validator, {}).get(chute_id)
                         if update:
                             logger.warning(
-                                f"Skipping chute reconsiliation for chute with rolling {update=}"
+                                f"Skipping chute reconciliation for chute with rolling {update=}"
                             )
                             continue
                         logger.info(f"Found a new/untracked chute: {chute_id}")
@@ -1428,7 +1428,7 @@ class Gepetto:
                 await self.reconsile()
             except Exception as exc:
                 logger.error(
-                    f"Unexpected error in reconsiliation loop: {exc}\n{traceback.format_exc()}"
+                    f"Unexpected error in reconciliation loop: {exc}\n{traceback.format_exc()}"
                 )
 
 
