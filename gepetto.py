@@ -1207,7 +1207,9 @@ class Gepetto:
                     update = updating.get(deployment.validator, {}).get(deployment.chute_id)
                     if update:
                         logger.warning(f"Skipping reconciliation for chute with rolling {update=}")
-                        all_instances.add(deployment.instance_id)
+                        all_deployments.add(deployment.deployment_id)
+                        if deployment.instance_id:
+                            all_instances.add(deployment.instance_id)
                         continue
                     logger.warning(
                         f"Chute: {deployment.chute_id} version={deployment.version} on validator {deployment.validator} not found"
