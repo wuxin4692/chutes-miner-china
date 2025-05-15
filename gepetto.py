@@ -699,7 +699,7 @@ class Gepetto:
         A rolling update event, meaning we need to re-create a single instance.
         """
         chute_id = event_data["chute_id"]
-        version = event_data["version"]
+        version = event_data["new_version"]
         validator_hotkey = event_data["validator"]
         instance_id = event_data["instance_id"]
         logger.info(f"Received rolling update event for {chute_id=} {version=} {instance_id=}")
