@@ -62,10 +62,10 @@ class Gepetto:
         """
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        await self.reconsile()
+        await self.reconcile()
         asyncio.create_task(self.activator())
         asyncio.create_task(self.autoscaler())
-        asyncio.create_task(self.reconsiler())
+        asyncio.create_task(self.reconciler())
         await self.pubsub.start()
 
     @staticmethod
@@ -172,13 +172,16 @@ class Gepetto:
             "port": deployment.port,
         }
         try:
-            async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with aiohttp.ClientSession(raise_for_status=False) as session:
                 headers, payload_string = sign_request(payload=body)
                 async with session.post(
                     f"{vali.api}/instances/{deployment.chute_id}/",
                     headers=headers,
                     data=payload_string,
                 ) as resp:
+                    if resp.status >= 300:
+                        logger.error(f"Error announcing deployment to validator:\n{await resp.text()}")
+                    resp.raise_for_status()
                     instance = await resp.json()
 
                     # Track the instance ID.
@@ -204,13 +207,16 @@ class Gepetto:
             logger.warning(f"No validator for deployment: {deployment.deployment_id}")
             return
         body = {"active": True}
-        async with aiohttp.ClientSession(raise_for_status=True) as session:
+        async with aiohttp.ClientSession(raise_for_status=False) as session:
             headers, payload_string = sign_request(payload=body)
             async with session.patch(
                 f"{vali.api}/instances/{deployment.chute_id}/{deployment.instance_id}",
                 headers=headers,
                 data=payload_string,
             ) as resp:
+                if resp.status >= 300:
+                    logger.error(f"Error activating deployment:\n{await resp.text()}")
+                resp.raise_for_status()
                 data = await resp.json()
                 async with get_session() as session:
                     deployment = (
@@ -771,8 +777,8 @@ class Gepetto:
                         ban_reason=None,
                     )
                     db.add(chute)
-                    await db.commit()
-                    await db.refresh(chute)
+                await db.commit()
+                await db.refresh(chute)
                 await k8s.create_code_config_map(chute)
 
         # Deploy the new version.
@@ -1157,7 +1163,7 @@ class Gepetto:
                                 await self.undeploy(deployment.deployment_id)
                             return
 
-    async def reconsile(self):
+    async def reconcile(self):
         """
         Put our local system back in harmony with the validators.
         """
@@ -1291,7 +1297,7 @@ class Gepetto:
                     if destroyed:
                         continue
 
-                # Track the list of deployments so we can reconsile with k8s state.
+                # Track the list of deployments so we can reconcile with k8s state.
                 all_deployments.add(deployment.deployment_id)
                 if deployment.instance_id:
                     all_instances.add(deployment.instance_id)
@@ -1420,14 +1426,14 @@ class Gepetto:
 
             await asyncio.gather(*tasks)
 
-    async def reconsiler(self):
+    async def reconciler(self):
         """
-        Reconsile on a regular basis.
+        Reconcile on a regular basis.
         """
         while True:
             await asyncio.sleep(600)
             try:
-                await self.reconsile()
+                await self.reconcile()
             except Exception as exc:
                 logger.error(
                     f"Unexpected error in reconciliation loop: {exc}\n{traceback.format_exc()}"
