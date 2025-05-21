@@ -416,14 +416,13 @@ class Gepetto:
         except Exception as exc:
             logger.warning(f"Error purging {instance_id=} from {vali.hotkey=}: {exc}")
 
-    async def undeploy(self, deployment_id: str):
+    async def undeploy(self, deployment_id: str, instance_id: str = None):
         """
         Delete a deployment.
         """
         logger.info(f"Removing all traces of deployment: {deployment_id}")
 
         # Clean up the database.
-        instance_id = None
         chute_id = None
         validator_hotkey = None
         async with get_session() as session:
@@ -437,7 +436,8 @@ class Gepetto:
                 .scalar_one_or_none()
             )
             if deployment:
-                instance_id = deployment.instance_id
+                if not instance_id:
+                    instance_id = deployment.instance_id
                 chute_id = deployment.chute_id
                 validator_hotkey = deployment.validator
                 await session.delete(deployment)
@@ -728,7 +728,7 @@ class Gepetto:
             )
             if deployment:
                 server_id = deployment.server.server_id
-                await self.undeploy(deployment.deployment_id)
+                await self.undeploy(deployment.deployment_id, instance_id=instance_id)
             deployment = None
 
         # Make sure the local chute is updated.
@@ -759,9 +759,11 @@ class Gepetto:
                         "ref_str",
                         "version",
                         "supported_gpus",
+                        "chutes_version",
                     ):
                         setattr(chute, key, chute_dict.get(key))
                     chute.gpu_count = chute_dict["node_selector"]["gpu_count"]
+                    chute.ban_reason = None
                 else:
                     chute = Chute(
                         chute_id=chute_id,
@@ -775,6 +777,7 @@ class Gepetto:
                         supported_gpus=chute_dict["supported_gpus"],
                         gpu_count=chute_dict["node_selector"]["gpu_count"],
                         ban_reason=None,
+                        chutes_version=chute_dict["chutes_version"],
                     )
                     db.add(chute)
                 await db.commit()

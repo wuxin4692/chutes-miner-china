@@ -44,13 +44,11 @@ def main():
     args = parser.parse_args()
 
     miner = Miner()
-    # Dummy init.
-    gpu_count = miner.initialize(0)
     miner._init_seed = None
     app = FastAPI(
         title="GraVal bootstrap",
         description="GPU info plz",
-        version="0.0.1",
+        version="0.1.1",
     )
     gpu_lock = asyncio.Lock()
 
@@ -97,9 +95,9 @@ def main():
         """
         Get the list of devices, only used by internal components.
         """
-        verify_request(request, [args.hotkey])  # only allow requests from myself
+        verify_request(request, [args.hotkey])
         return {
-            "devices": [miner.get_device_info(idx) for idx in range(gpu_count)],
+            "devices": [miner.get_device_info(idx) for idx in range(miner._device_count)],
         }
 
     @app.post("/challenge/decrypt")
