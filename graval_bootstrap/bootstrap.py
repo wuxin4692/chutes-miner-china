@@ -9,19 +9,10 @@ import uvicorn
 import asyncio
 import json
 import base64
-from pydantic import BaseModel
 from graval.miner import Miner
 from substrateinterface import Keypair, KeypairType
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.responses import PlainTextResponse
-
-
-class Cipher(BaseModel):
-    ciphertext: str
-    iv: str
-    length: int
-    device_id: int
-    seed: int
 
 
 def main():
@@ -34,17 +25,16 @@ def main():
     parser.add_argument(
         "--validator-whitelist",
         type=str,
-        required=True,
     )
     parser.add_argument(
         "--hotkey",
         type=str,
-        required=True,
     )
     args = parser.parse_args()
 
     miner = Miner()
     miner._init_seed = None
+    miner._init_iter = None
     app = FastAPI(
         title="GraVal bootstrap",
         description="GPU info plz",
@@ -56,6 +46,8 @@ def main():
         """
         Verify the authenticity of a request.
         """
+        if not whitelist or not whitelist[0]:
+            return
         miner_hotkey = request.headers.get("X-Chutes-Miner")
         validator_hotkey = request.headers.get("X-Chutes-Validator")
         nonce = request.headers.get("X-Chutes-Nonce")
@@ -107,19 +99,25 @@ def main():
         """
         request_body = await request.body()
         sha2 = hashlib.sha256(request_body).hexdigest()
-        verify_request(request, args.validator_whitelist.split(","), extra_key=sha2)
+        verify_request(request, (args.validator_whitelist or "").split(","), extra_key=sha2)
         body = json.loads(request_body.decode())
-        cipher = Cipher(**body)
+        seed = body.get("seed", 42)
+        iterations = body.get("iterations", 1)
+        bytes_ = base64.b64decode(body.get("ciphertext"))
+        iv = bytes_[:16]
+        ciphertext = bytes_[16:]
+        device_index = body.get("device_index", 0)
         async with gpu_lock:
-            if not miner._init_seed != cipher.seed:
-                miner.initialize(cipher.seed)
-                miner._init_seed = cipher.seed
+            if not miner._init_seed != seed or miner._init_iter != iterations:
+                miner.initialize(seed, iterations=iterations)
+                miner._init_seed = seed
+                miner._init_iter = iterations
             return {
                 "plaintext": miner.decrypt(
-                    base64.b64decode(cipher.ciphertext.encode()),
-                    bytes.fromhex(cipher.iv),
-                    cipher.length,
-                    cipher.device_id,
+                    ciphertext,
+                    iv,
+                    len(ciphertext),
+                    device_index,
                 )
             }
 
@@ -128,7 +126,7 @@ def main():
         """
         Perform a device info challenge.
         """
-        verify_request(request, args.validator_whitelist.split(","))
+        verify_request(request, (args.validator_whitelist or "").split(","))
         return miner.process_device_info_challenge(challenge)
 
     uvicorn.run(app=app, host="0.0.0.0", port=args.port)

@@ -12,10 +12,14 @@ data:
 
     acl allowed_sites dstdomain "/etc/squid/allowed-sites.txt"
     acl SSL_ports port 443
+    acl Safe_ports port 80
+    acl Safe_ports port 443
     acl CONNECT method CONNECT
+    http_access allow CONNECT allowed_sites SSL_ports
     http_access deny CONNECT !SSL_ports
     http_access allow allowed_sites
     http_access deny all
+    always_direct allow all
 
   allowed-sites.txt: |
     # Chutes.
@@ -75,7 +79,12 @@ data:
     .s3.amazonaws.com
     .s3-*.amazonaws.com
     .s3.*.amazonaws.com
+    *.s3.amazonaws.com
+    *.s3-*.amazonaws.com
+    *.s3.*.amazonaws.com
+    *.amazonaws.com
     .storage.googleapis.com
+    *.googleapis.com
     .azureedge.net
     .blob.core.windows.net
 
