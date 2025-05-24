@@ -21,10 +21,5 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: chutes-squid
-      ports:
         - protocol: TCP
-          port: 3128
+          port: 443
