@@ -689,6 +689,7 @@ class Gepetto:
                 version=chute_dict["version"],
                 supported_gpus=chute_dict["supported_gpus"],
                 gpu_count=chute_dict["node_selector"]["gpu_count"],
+                chutes_version=chute_dict["chutes_version"],
                 ban_reason=None,
             )
             session.add(chute)
@@ -762,9 +763,11 @@ class Gepetto:
                             "ref_str",
                             "version",
                             "supported_gpus",
+                            "chutes_version",
                         ):
                             setattr(chute, key, chute_dict.get(key))
                         chute.gpu_count = chute_dict["node_selector"]["gpu_count"]
+                        chute.ban_reason = None
                     else:
                         chute = Chute(
                             chute_id=chute_id,
@@ -777,6 +780,7 @@ class Gepetto:
                             version=chute_dict["version"],
                             supported_gpus=chute_dict["supported_gpus"],
                             gpu_count=chute_dict["node_selector"]["gpu_count"],
+                            chutes_version=chute_dict["chutes_version"],
                             ban_reason=None,
                         )
                         db.add(chute)
