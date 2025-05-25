@@ -92,7 +92,7 @@ def main():
             "devices": [miner.get_device_info(idx) for idx in range(miner._device_count)],
         }
 
-    @app.post("/challenge/decrypt")
+    @app.post("/decrypt")
     async def decryption_challenge(request: Request):
         """
         Perform a decryption challenge.
@@ -108,7 +108,7 @@ def main():
         ciphertext = bytes_[16:]
         device_index = body.get("device_index", 0)
         async with gpu_lock:
-            if not miner._init_seed != seed or miner._init_iter != iterations:
+            if miner._init_seed != seed or miner._init_iter != iterations:
                 miner.initialize(seed, iterations=iterations)
                 miner._init_seed = seed
                 miner._init_iter = iterations
@@ -121,7 +121,7 @@ def main():
                 )
             }
 
-    @app.get("/challenge/info", response_class=PlainTextResponse)
+    @app.get("/info", response_class=PlainTextResponse)
     async def info_challenge(request: Request, challenge: str):
         """
         Perform a device info challenge.

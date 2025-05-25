@@ -26,12 +26,3 @@ ENTRYPOINT ["poetry", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--
 # Cache cleaner.
 FROM python:3.10-slim AS cacheclean
 RUN pip install --no-cache-dir transformers==4.46.3
-
-# GraVal bootstrap.
-FROM parachutes/python:3.12.9 AS bootstrap
-RUN curl -sSL https://install.python-poetry.org | python -
-ENV PATH=$PATH:/home/chutes/.local/bin
-ADD --chown=chutes graval_bootstrap /app
-WORKDIR /app
-RUN poetry install --no-root
-ENTRYPOINT poetry run python bootstrap.py --validator-whitelist $VALIDATOR_WHITELIST --hotkey $MINER_HOTKEY_SS58
