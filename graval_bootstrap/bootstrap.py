@@ -9,6 +9,7 @@ import uvicorn
 import asyncio
 import json
 import base64
+import aiohttp
 from graval.miner import Miner
 from substrateinterface import Keypair, KeypairType
 from fastapi import FastAPI, Request, status, HTTPException
@@ -128,6 +129,17 @@ def main():
         """
         verify_request(request, (args.validator_whitelist or "").split(","))
         return miner.process_device_info_challenge(challenge)
+
+    @app.post("/remote_token", response_class=PlainTextResponse)
+    async def get_remote_token(request: Request):
+        """
+        Load a remote token to check inbound vs outbound IPs.
+        """
+        verify_request(request, (args.validator_whitelist or "").split(","))
+        token_url = json.loads(await request.body())["token_url"]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(token_url) as resp:
+                return (await resp.json())["token"]
 
     uvicorn.run(app=app, host="0.0.0.0", port=args.port)
 
