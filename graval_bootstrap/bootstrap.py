@@ -104,6 +104,7 @@ def main():
         body = json.loads(request_body.decode())
         seed = body.get("seed", 42)
         bytes_ = base64.b64decode(body.get("ciphertext"))
+        iterations = body.get("iterations", 1)
         iv = bytes_[:16]
         ciphertext = bytes_[16:]
         device_index = body.get("device_index", 0)
