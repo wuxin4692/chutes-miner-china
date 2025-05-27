@@ -487,7 +487,7 @@ async def bootstrap_server(node_object: V1Node, server_args: ServerArgs):
             await wait_for_deletion(label_selector)
         except Exception:
             ...
-        if delete_node and False:
+        if delete_node:
             logger.info(f"Purging failed server: {node_name=} {node_uid=}")
             async with get_session() as session:
                 node = (
