@@ -34,12 +34,12 @@ def main():
     args = parser.parse_args()
 
     miner = Miner()
+    gpu_count = miner.initialize(0)
     miner._init_seed = None
-    miner._init_iter = None
     app = FastAPI(
         title="GraVal bootstrap",
         description="GPU info plz",
-        version="0.1.1",
+        version="0.0.6",
     )
     gpu_lock = asyncio.Lock()
 
@@ -103,16 +103,14 @@ def main():
         verify_request(request, (args.validator_whitelist or "").split(","), extra_key=sha2)
         body = json.loads(request_body.decode())
         seed = body.get("seed", 42)
-        iterations = body.get("iterations", 1)
         bytes_ = base64.b64decode(body.get("ciphertext"))
         iv = bytes_[:16]
         ciphertext = bytes_[16:]
         device_index = body.get("device_index", 0)
         async with gpu_lock:
-            if miner._init_seed != seed or miner._init_iter != iterations:
-                miner.initialize(seed, iterations=iterations)
+            if miner._init_seed != seed:
+                miner.initialize(seed)
                 miner._init_seed = seed
-                miner._init_iter = iterations
             return {
                 "plaintext": miner.decrypt(
                     ciphertext,
