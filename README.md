@@ -1,8 +1,18 @@
+# [中文版](README_CN.md) | [English Version]
+
+
 # Chutes miner
+
+Original repository code: https://github.com/rayonlabs/chutes-miner
 
 This repository contains all components related to mining on the chutes.ai permissionless, serverless, AI-centric compute platform.
 
-We've tried to automate the bulk of the process via ansible, helm/kubernetes, so while it may seem like a lot, it should be fairly easy to get started.
+We have attempted to automate most of the processes using ansible, helm/kubernetes, so although it may seem like a lot, getting started should be fairly straightforward.
+
+This repository has been partially modified for operation in China's network environment, with detailed explanations of installation steps and includes additional installations.
+
+My idea is to minimize changes to the source code as much as possible and use additional software to enable it to run in China's network environment.
+
 
 ## 📋 Table of Contents
 
