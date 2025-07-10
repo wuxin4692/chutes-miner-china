@@ -13,7 +13,7 @@ This repository has been partially modified for operation in China's network env
 
 My idea is to minimize changes to the source code as much as possible and use additional software to enable it to run in China's network environment.
 
-
+To distinguish it from the official documentation, the parts I added will be written in **bold font** at the end of each paragraph.
 ## 📋 Table of Contents
 
 - [TL;DR](#%EF%B8%8F-tldr)

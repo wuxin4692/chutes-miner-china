@@ -12,7 +12,7 @@
 
 我的想法是尽量不更改源代码 使用另外的软件使他可以在中国网络环境下运行
 
-为了跟官方文档区别开来我增加的部分将使用<font color='red'> 红色文字</font>
+为了跟官方文档区别开来我增加的部分将使用**加粗字体写在每个段落的最后**
 
 ## 📋 目录
 
@@ -120,6 +120,8 @@ registry proxy 本身是一个 nginx 服务器，它对矿工 API 执行 auth �
 注入签名的矿工 API 代码位于：https://github.com/rayonlabs/chutes-miner/blob/main/api/registry/router.py
 
 然后 nginx 将请求代理回相关的验证器（基于子域名中的 hotkey），验证器验证签名并将这些标头替换为可用于我们自托管 registry 的基本身份验证：https://github.com/rayonlabs/chutes-api/blob/main/api/registry/router.py
+
+🇨🇳 **由于他监听的是127.0.0.1，所以在中国网络中如果使用了全局的代理,会导致他运行失败**
 
 *__通过 helm 图表部署时，这会自动安装和配置__*
 
